@@ -1,22 +1,51 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
 const API_HOST = 'localhost';
 const API_PORT = 8642;
 const PROXY_PORT = 3001;
 
+// Function to get current CLI session ID
+function getCurrentSessionId() {
+  try {
+    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.startsWith('session_') && f.endsWith('.json'))
+      .filter(f => !f.includes('api-') && !f.includes('cron_'))
+      .sort()
+      .reverse();
+    
+    for (const file of files) {
+      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
+      // Only return CLI sessions
+      if (data.session_id && data.platform === 'cli') {
+        return data.session_id;
+      }
+    }
+  } catch (err) {
+    console.error('Error reading session:', err);
+  }
+  return null;
+}
+
 const server = http.createServer((req, res) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
-  console.log('  Headers:', JSON.stringify(req.headers, null, 2));
-  
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Hermes-Session-Id');
   
   if (req.method === 'OPTIONS') {
-    console.log('  -> OPTIONS preflight');
     res.writeHead(200);
     res.end();
+    return;
+  }
+
+  // Handle session ID endpoint
+  if (req.url === '/api/session-id') {
+    const sessionId = getCurrentSessionId();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ session_id: sessionId }));
     return;
   }
 
@@ -34,18 +63,13 @@ const server = http.createServer((req, res) => {
     headers: headers,
   };
 
-  console.log('  -> Proxying to:', `${API_HOST}:${API_PORT}${req.url}`);
-  console.log('  -> Forwarded headers:', JSON.stringify(headers, null, 2));
-
   const proxyReq = http.request(options, (proxyRes) => {
-    console.log('  <- Response:', proxyRes.statusCode);
-    console.log('  <- Response headers:', JSON.stringify(proxyRes.headers, null, 2));
     res.writeHead(proxyRes.statusCode, proxyRes.headers);
     proxyRes.pipe(res, { end: true });
   });
 
   proxyReq.on('error', (err) => {
-    console.error('  !! Proxy error:', err.message);
+    console.error('Proxy error:', err.message);
     res.writeHead(500);
     res.end('Proxy error: ' + err.message);
   });
@@ -55,5 +79,4 @@ const server = http.createServer((req, res) => {
 
 server.listen(PROXY_PORT, () => {
   console.log(`Proxy server running on http://localhost:${PROXY_PORT}`);
-  console.log(`Forwarding to http://${API_HOST}:${API_PORT}`);
 });
