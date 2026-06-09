@@ -1,7 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
-// 使用代理服务器
-const API_BASE = 'http://localhost:3001'
+const API_BASE = 'http://localhost:3001'  // 代理服务器
+const HERMES_SESSION_ID = '20260608_165429_4c8909'  // 共享CLI会话
 
 export function useHermes() {
   const [isLoading, setIsLoading] = useState(false)
@@ -17,6 +17,7 @@ export function useHermes() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer hermes-secret-key-2026',
+          'X-Hermes-Session-Id': HERMES_SESSION_ID,  // 共享session
         },
         body: JSON.stringify({
           model: 'mimo-v2.5-pro',
@@ -52,5 +53,6 @@ export function useHermes() {
     checkHealth,
     isLoading,
     error,
+    sessionId: HERMES_SESSION_ID,
   }
 }
