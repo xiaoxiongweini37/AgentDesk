@@ -4,6 +4,7 @@ const tabs = [
   { id: 'chat', icon: '💬', label: '对话' },
   { id: 'tasks', icon: '📋', label: '任务' },
   { id: 'files', icon: '📁', label: '文件' },
+  { id: 'dashboard', icon: '📊', label: '看板' },
 ]
 
 export default function Sidebar({ activeTab, onTabChange }) {

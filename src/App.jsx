@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
 import TaskList from './components/TaskList'
 import FileUpload from './components/FileUpload'
+import Dashboard from './components/Dashboard'
 import { useHermes } from './hooks/useHermes'
 
 function App() {
@@ -68,6 +69,7 @@ function App() {
         )}
         {activeTab === 'tasks' && <TaskList />}
         {activeTab === 'files' && <FileUpload onUpload={handleFileUpload} />}
+        {activeTab === 'dashboard' && <Dashboard />}
       </main>
     </div>
   )
