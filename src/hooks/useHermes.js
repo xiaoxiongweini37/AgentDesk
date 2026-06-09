@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 
-const API_BASE = 'http://localhost:8642'
-const API_KEY = 'hermes-secret-key-2026'
+// 使用代理，不需要写完整URL
+const API_BASE = ''
 
 export function useHermes() {
   const [isLoading, setIsLoading] = useState(false)
@@ -16,7 +16,7 @@ export function useHermes() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
+          'Authorization': 'Bearer hermes-secret-key-2026',
         },
         body: JSON.stringify({
           model: 'mimo-v2.5-pro',
@@ -40,11 +40,7 @@ export function useHermes() {
 
   const checkHealth = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/health`, {
-        headers: {
-          'Authorization': `Bearer ${API_KEY}`,
-        },
-      })
+      const response = await fetch(`${API_BASE}/health`)
       return response.ok
     } catch {
       return false

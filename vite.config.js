@@ -6,6 +6,17 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    // 代理 API 请求，解决 CORS 问题
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8642',
+        changeOrigin: true,
+      },
+      '/v1': {
+        target: 'http://localhost:8642',
+        changeOrigin: true,
+      },
+    },
   },
   envPrefix: ['VITE_', 'TAURI_'],
   build: {
