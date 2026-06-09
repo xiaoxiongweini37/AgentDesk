@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 
-// 直接连接 API 服务器
-const API_BASE = 'http://localhost:8642'
+// 使用代理服务器
+const API_BASE = 'http://localhost:3001'
 
 export function useHermes() {
   const [isLoading, setIsLoading] = useState(false)
