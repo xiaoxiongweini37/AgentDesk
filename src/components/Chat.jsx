@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 
-export default function Chat({ messages, onSend, onFileUpload }) {
+export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -11,7 +11,7 @@ export default function Chat({ messages, onSend, onFileUpload }) {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    if (input.trim()) {
+    if (input.trim() && !isLoading) {
       onSend(input.trim())
       setInput('')
     }
@@ -35,8 +35,6 @@ export default function Chat({ messages, onSend, onFileUpload }) {
         flex: 1, 
         display: 'flex', 
         flexDirection: 'column',
-        onDrop: handleDrop,
-        onDragOver: handleDragOver,
       }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
@@ -59,6 +57,7 @@ export default function Chat({ messages, onSend, onFileUpload }) {
             <div style={{ fontSize: 48, marginBottom: 16 }}>🤖</div>
             <h2 style={{ color: 'var(--text-primary)', marginBottom: 8 }}>AgentDesk</h2>
             <p>开始对话，或拖拽文件到此处上传</p>
+            <p style={{ fontSize: 12, marginTop: 8 }}>已连接 Hermes API</p>
           </div>
         )}
 
@@ -77,11 +76,26 @@ export default function Chat({ messages, onSend, onFileUpload }) {
               background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-card)',
               color: msg.role === 'user' ? 'var(--bg-primary)' : 'var(--text-primary)',
               wordBreak: 'break-word',
+              whiteSpace: 'pre-wrap',
             }}>
               {msg.content}
             </div>
           </div>
         ))}
+
+        {isLoading && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <div style={{
+              padding: '12px 16px',
+              borderRadius: 'var(--radius)',
+              background: 'var(--bg-card)',
+              color: 'var(--text-secondary)',
+            }}>
+              思考中...
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -119,6 +133,7 @@ export default function Chat({ messages, onSend, onFileUpload }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="输入消息... (拖拽文件可直接上传)"
+          disabled={isLoading}
           style={{
             flex: 1,
             padding: '12px 16px',
@@ -128,22 +143,23 @@ export default function Chat({ messages, onSend, onFileUpload }) {
             color: 'var(--text-primary)',
             fontSize: 14,
             outline: 'none',
+            opacity: isLoading ? 0.7 : 1,
           }}
         />
         <button
           type="submit"
-          disabled={!input.trim()}
+          disabled={!input.trim() || isLoading}
           style={{
             padding: '8px 20px',
             border: 'none',
             borderRadius: 'var(--radius)',
-            background: input.trim() ? 'var(--accent)' : 'var(--border)',
-            color: input.trim() ? 'var(--bg-primary)' : 'var(--text-secondary)',
-            cursor: input.trim() ? 'pointer' : 'not-allowed',
+            background: (input.trim() && !isLoading) ? 'var(--accent)' : 'var(--border)',
+            color: (input.trim() && !isLoading) ? 'var(--bg-primary)' : 'var(--text-secondary)',
+            cursor: (input.trim() && !isLoading) ? 'pointer' : 'not-allowed',
             fontWeight: 'bold',
           }}
         >
-          发送
+          {isLoading ? '等待中...' : '发送'}
         </button>
       </form>
     </div>
