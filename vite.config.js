@@ -11,10 +11,21 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8642',
         changeOrigin: true,
+        secure: false,
       },
       '/v1': {
         target: 'http://localhost:8642',
         changeOrigin: true,
+        secure: false,
+        // 不覆盖请求头，保留 Authorization
+        configure: (proxy, options) => {
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            // 确保 Authorization 头被转发
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization);
+            }
+          });
+        },
       },
     },
   },
