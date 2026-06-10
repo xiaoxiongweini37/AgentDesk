@@ -65,7 +65,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0, overflow: 'hidden' }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
