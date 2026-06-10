@@ -8,7 +8,7 @@ const tabs = [
   { id: 'dashboard', icon: '📊', label: '看板' },
 ]
 
-export default function Sidebar({ activeTab, onTabChange }) {
+export default function Sidebar({ activeTab, onTabChange, onSettings }) {
   const handleClick = (e, tabId) => {
     // 点击动画
     gsap.to(e.currentTarget, {
@@ -84,6 +84,7 @@ export default function Sidebar({ activeTab, onTabChange }) {
       <div style={{ marginTop: 'auto' }}>
         <button
           title="设置"
+          onClick={() => onSettings?.()}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           style={{

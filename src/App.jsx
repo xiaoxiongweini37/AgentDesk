@@ -4,11 +4,13 @@ import Chat from './components/Chat'
 import TaskList from './components/TaskList'
 import FileUpload from './components/FileUpload'
 import Dashboard from './components/Dashboard'
+import Settings from './components/Settings'
 import { useHermes } from './hooks/useHermes'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [messages, setMessages] = useState([])
+  const [showSettings, setShowSettings] = useState(false)
   const { sendMessageStream, isLoading, error, streamingText } = useHermes()
 
   const handleSendMessage = async (msg) => {
@@ -54,7 +56,11 @@ function App() {
 
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab}
+        onSettings={() => setShowSettings(true)}
+      />
       
       <main style={{ 
         flex: 1, 
@@ -75,6 +81,8 @@ function App() {
         {activeTab === 'files' && <FileUpload onUpload={handleFileUpload} />}
         {activeTab === 'dashboard' && <Dashboard />}
       </main>
+
+      {showSettings && <Settings onClose={() => setShowSettings(false)} />}
     </div>
   )
 }
