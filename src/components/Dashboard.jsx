@@ -3,8 +3,8 @@ import { gsap } from '../utils/animations'
 
 const API_BASE = 'http://localhost:3001'
 
-// 内容类型颜色配置
-const CONTENT_COLORS = {
+// 内容类型颜色配置（深色主题）
+const CONTENT_COLORS_DARK = {
   user_input: { color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)', icon: '👤', label: '用户输入' },
   agent_output: { color: '#a5d6a7', bg: 'rgba(165,214,167,0.08)', icon: '🤖', label: 'Agent 输出' },
   file_change: { color: '#ffcc80', bg: 'rgba(255,204,128,0.08)', icon: '📝', label: '文件改动' },
@@ -12,6 +12,23 @@ const CONTENT_COLORS = {
   thinking: { color: '#ce93d8', bg: 'rgba(206,147,216,0.08)', icon: '💭', label: '思考中' },
   tool_call: { color: '#90caf9', bg: 'rgba(144,202,249,0.08)', icon: '🔧', label: '工具调用' },
   default: { color: 'var(--text-secondary)', bg: 'transparent', icon: '📄', label: '' },
+}
+
+// 浅色主题颜色（更深更饱和）
+const CONTENT_COLORS_LIGHT = {
+  user_input: { color: '#0277bd', bg: 'rgba(2,119,189,0.08)', icon: '👤', label: '用户输入' },
+  agent_output: { color: '#2e7d32', bg: 'rgba(46,125,50,0.1)', icon: '🤖', label: 'Agent 输出' },
+  file_change: { color: '#e65100', bg: 'rgba(230,81,0,0.08)', icon: '📝', label: '文件改动' },
+  error: { color: '#c62828', bg: 'rgba(198,40,40,0.08)', icon: '❌', label: '错误' },
+  thinking: { color: '#7b1fa2', bg: 'rgba(123,31,162,0.08)', icon: '💭', label: '思考中' },
+  tool_call: { color: '#1565c0', bg: 'rgba(21,101,192,0.08)', icon: '🔧', label: '工具调用' },
+  default: { color: 'var(--text-secondary)', bg: 'transparent', icon: '📄', label: '' },
+}
+
+// 获取当前主题对应的颜色
+function getThemeColors() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light'
+  return isLight ? CONTENT_COLORS_LIGHT : CONTENT_COLORS_DARK
 }
 
 // 解析输出行，识别内容类型
@@ -63,6 +80,7 @@ function parseLineType(line) {
 
 // 渲染带颜色的输出块
 function ColoredOutput({ output, timestamp }) {
+  const CONTENT_COLORS = getThemeColors()
   const lines = output.split('\n')
   const groups = []
   let currentGroup = null
@@ -326,7 +344,7 @@ export default function Dashboard() {
         flexShrink: 0,
         flexWrap: 'wrap',
       }}>
-        {Object.entries(CONTENT_COLORS).filter(([k]) => k !== 'default').map(([key, style]) => (
+        {Object.entries(getThemeColors()).filter(([k]) => k !== 'default').map(([key, style]) => (
           <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
             <span style={{ 
               width: 12, 
