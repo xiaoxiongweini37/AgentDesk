@@ -9,7 +9,6 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   const outputRefs = useRef({})
-  const isAtBottomRef = useRef({})
 
   const fetchDashboard = async () => {
     try {
@@ -28,38 +27,17 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboard()
-    const interval = setInterval(fetchDashboard, 5000)
-    return () => clearInterval(interval)
   }, [])
 
-  // 智能滚动：只在用户已经在底部时才自动滚动
+  // 初始化时滚动到底部
   useEffect(() => {
     agents.forEach(agent => {
       const ref = outputRefs.current[agent.id]
-      if (ref && isAtBottomRef.current[agent.id]) {
+      if (ref) {
         ref.scrollTop = ref.scrollHeight
       }
     })
-  }, [agents])
-
-  // 检测用户是否在底部
-  const handleScroll = (agentId) => {
-    const ref = outputRefs.current[agentId]
-    if (ref) {
-      const threshold = 50 // 距离底部50px内算"在底部"
-      isAtBottomRef.current[agentId] = 
-        ref.scrollHeight - ref.scrollTop - ref.clientHeight < threshold
-    }
-  }
-
-  // 初始化时标记为在底部
-  const initRef = (agentId, el) => {
-    outputRefs.current[agentId] = el
-    if (el) {
-      isAtBottomRef.current[agentId] = true
-      el.scrollTop = el.scrollHeight
-    }
-  }
+  }, [loading])
 
   const handleRefresh = () => {
     fetchDashboard()
@@ -224,8 +202,7 @@ export default function Dashboard() {
             </div>
 
             <div 
-              ref={el => initRef(agent.id, el)}
-              onScroll={() => handleScroll(agent.id)}
+              ref={el => outputRefs.current[agent.id] = el}
               style={{
                 padding: '12px 16px',
                 fontSize: 12,
