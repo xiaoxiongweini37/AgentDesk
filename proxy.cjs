@@ -18,7 +18,7 @@ function getCurrentSessionId() {
         name: f,
         mtime: fs.statSync(path.join(sessionsDir, f)).mtime
       }))
-      .sort((a, b) => b.mtime - a.mtime); // 按修改时间降序
+      .sort((a, b) => b.mtime - a.mtime);
     
     for (const file of files) {
       const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, file.name), 'utf8'));
@@ -32,7 +32,34 @@ function getCurrentSessionId() {
   return null;
 }
 
-// Function to get tmux session output
+// 从会话文件读取结构化消息
+function getMessagesFromSession(sessionId, limit = 50) {
+  try {
+    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.includes(sessionId) && f.endsWith('.json'));
+    
+    if (files.length === 0) return [];
+    
+    const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8'));
+    const messages = data.messages || [];
+    
+    // 取最近的消息，过滤掉 tool 消息（太冗长）
+    return messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-limit)
+      .map(m => ({
+        role: m.role,
+        content: m.content || '',
+        timestamp: m.timestamp || null,
+      }));
+  } catch (err) {
+    console.error('Error reading session messages:', err);
+    return [];
+  }
+}
+
+// Function to get tmux session output (备用，用于非 Hermes 的 agent)
 function getTmuxOutput(sessionName, lines = 50) {
   try {
     return execSync(`tmux capture-pane -t ${sessionName} -p -S -${lines}`, { encoding: 'utf8', timeout: 5000 }).trim();
@@ -76,10 +103,12 @@ function detectTask(output) {
   return '💤 空闲';
 }
 
-// Dashboard data endpoint
+// Dashboard data endpoint - 从会话文件读取结构化数据
 function getDashboardData() {
+  const currentSessionId = getCurrentSessionId();
+  
   const agents = [
-    { id: 'commander', name: '总指挥', role: '协调·监控·读图', tmux: null },
+    { id: 'commander', name: '总指挥', role: '协调·监控·读图', tmux: null, sessionId: currentSessionId },
     { id: 'worker', name: 'A号', role: '速度型编码', tmux: 'worker' },
     { id: 'coder-b', name: 'B号', role: '严谨型编码', tmux: 'coder-b' },
     { id: 'coder-c', name: 'C号', role: '测试评估', tmux: 'coder-c' },
@@ -87,12 +116,29 @@ function getDashboardData() {
   ];
   
   return agents.map(agent => {
-    if (!agent.tmux) {
+    // 总指挥：从会话文件读取结构化数据
+    if (agent.sessionId) {
+      const messages = getMessagesFromSession(agent.sessionId, 20);
+      const lastMsg = messages[messages.length - 1];
+      const task = lastMsg ? (lastMsg.role === 'user' ? '等待回复...' : '工作中') : '空闲';
+      
       return {
         ...agent,
         online: true,
-        task: '协调团队·监控进度·验收质量',
-        output: '在线',
+        task,
+        messages, // 结构化消息，带 role
+        output: null, // 不再使用纯文本输出
+      };
+    }
+    
+    // 其他 agent：仍然从 tmux 读取（备用）
+    if (!agent.tmux) {
+      return {
+        ...agent,
+        online: false,
+        task: '未配置',
+        messages: [],
+        output: '离线',
       };
     }
     
@@ -104,6 +150,7 @@ function getDashboardData() {
       ...agent,
       online,
       task,
+      messages: [], // tmux 模式下没有结构化消息
       output: output || '离线',
     };
   });
@@ -144,7 +191,6 @@ const server = http.createServer((req, res) => {
   headers.host = `${API_HOST}:${API_PORT}`;
 
   // 对于聊天请求，强制注入正确的 CLI session ID
-  // 这样 exe/前端不需要知道 session_id，代理服务器自动处理
   if (req.url === '/v1/chat/completions') {
     const currentSessionId = getCurrentSessionId();
     if (currentSessionId) {
