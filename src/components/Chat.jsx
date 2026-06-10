@@ -10,12 +10,24 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
   const fileInputRef = useRef(null)
   const lastMessageRef = useRef(null)
 
+  // 过滤系统消息
+  const filteredMessages = messages.filter(msg => {
+    const content = msg.content || ''
+    // 过滤 Skill Curator 和其他系统消息
+    if (content.startsWith('Review the conversation above')) return false
+    if (content.startsWith('[IMPORTANT:')) return false
+    if (content.includes('skill library')) return false
+    if (content.includes('DELIVERY:')) return false
+    if (content.includes('SILENT:')) return false
+    return true
+  })
+
   // 自动滚动到底部（只在用户没手动滚动时）
   useEffect(() => {
     if (autoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-    if (lastMessageRef.current && messages.length > 0) {
+    if (lastMessageRef.current && filteredMessages.length > 0) {
       gsap.fromTo(lastMessageRef.current, 
         { y: 20, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.3, ease: 'power2.out' }
@@ -83,7 +95,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               position: 'relative',
             }}
           >
-            {messages.length === 0 && !streamingText && (
+            {filteredMessages.length === 0 && !streamingText && (
               <div style={{
                 textAlign: 'center',
                 color: 'var(--text-secondary)',
@@ -96,10 +108,10 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               </div>
             )}
 
-            {messages.map((msg, i) => (
+            {filteredMessages.map((msg, i) => (
               <div
                 key={i}
-                ref={i === messages.length - 1 ? lastMessageRef : null}
+                ref={i === filteredMessages.length - 1 ? lastMessageRef : null}
                 style={{
                   display: 'flex',
                   justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
