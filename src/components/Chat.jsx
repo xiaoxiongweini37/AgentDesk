@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from '../utils/animations'
 
-export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
+export default function Chat({ messages, onSend, onFileUpload, isLoading, streamingText }) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -16,7 +16,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
         { y: 0, opacity: 1, duration: 0.3, ease: 'power2.out' }
       )
     }
-  }, [messages])
+  }, [messages, streamingText])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -62,7 +62,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
         flexDirection: 'column',
         gap: 12,
       }}>
-        {messages.length === 0 && (
+        {messages.length === 0 && !streamingText && (
           <div style={{
             textAlign: 'center',
             color: 'var(--text-secondary)',
@@ -98,7 +98,35 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
           </div>
         ))}
 
-        {isLoading && (
+        {/* 流式输出显示 */}
+        {streamingText && (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <div
+              ref={lastMessageRef}
+              style={{
+                maxWidth: '70%',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius)',
+                background: 'var(--bg-card)',
+                color: 'var(--text-primary)',
+                wordBreak: 'break-word',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {streamingText}
+              <span style={{ 
+                display: 'inline-block',
+                width: 8,
+                height: 16,
+                background: 'var(--accent)',
+                marginLeft: 2,
+                animation: 'blink 1s infinite',
+              }} />
+            </div>
+          </div>
+        )}
+
+        {isLoading && !streamingText && (
           <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <div style={{
               padding: '12px 16px',
@@ -180,6 +208,13 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
           {isLoading ? '等待中...' : '发送'}
         </button>
       </form>
+
+      <style>{`
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
+        }
+      `}</style>
     </div>
   )
 }

@@ -9,7 +9,7 @@ import { useHermes } from './hooks/useHermes'
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [messages, setMessages] = useState([])
-  const { sendMessage, isLoading, error } = useHermes()
+  const { sendMessageStream, isLoading, error, streamingText } = useHermes()
 
   const handleSendMessage = async (msg) => {
     // 添加用户消息
@@ -23,8 +23,11 @@ function App() {
         content: m.content,
       }))
 
-      // 调用 Hermes API
-      const response = await sendMessage(allMessages)
+      // 流式调用 Hermes API
+      const response = await sendMessageStream(allMessages, (chunk, fullText) => {
+        // 可以在这里处理每个 chunk
+        // console.log('Chunk:', chunk)
+      })
       
       // 添加助手回复
       setMessages(prev => [...prev, { 
@@ -65,6 +68,7 @@ function App() {
             onSend={handleSendMessage}
             onFileUpload={handleFileUpload}
             isLoading={isLoading}
+            streamingText={streamingText}
           />
         )}
         {activeTab === 'tasks' && <TaskList />}
