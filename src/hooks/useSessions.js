@@ -83,6 +83,23 @@ export function useSessions() {
     fetchSessions()
   }, [fetchSessions])
 
+  // 加载单个会话的消息
+  const loadSessionMessages = useCallback(async (sessionId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages`)
+      if (!res.ok) throw new Error('Failed to fetch messages')
+      const messages = await res.json()
+      // 更新本地会话数据
+      setSessions(prev => prev.map(s =>
+        s.id === sessionId ? { ...s, messages, messageCount: messages.length } : s
+      ))
+      return messages
+    } catch (err) {
+      console.error('获取会话消息失败:', err)
+      return []
+    }
+  }, [])
+
   const activeSession = sessions.find(s => s.id === activeSessionId) || null
 
   return {
@@ -95,6 +112,7 @@ export function useSessions() {
     updateSessionMessages,
     renameSession,
     refreshSessions,
+    loadSessionMessages,
     loading,
   }
 }

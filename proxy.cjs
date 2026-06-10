@@ -293,6 +293,15 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Handle single session messages endpoint
+  if (req.url.startsWith('/api/sessions/') && req.url.endsWith('/messages')) {
+    const sessionId = req.url.split('/')[3];
+    const messages = getMessagesFromSession(sessionId, 200);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(messages));
+    return;
+  }
+
   // Remove Origin header to avoid CORS issues
   const headers = { ...req.headers };
   delete headers.origin;

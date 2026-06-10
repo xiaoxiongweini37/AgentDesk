@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Sidebar from './components/Sidebar'
 import Chat from './components/Chat'
 import TaskList from './components/TaskList'
@@ -23,10 +23,21 @@ function App() {
     updateSessionMessages,
     renameSession,
     refreshSessions,
+    loadSessionMessages,
     loading,
   } = useSessions()
 
   const messages = activeSession?.messages || []
+
+  // 选择会话时加载消息
+  const handleSelectSession = useCallback(async (sessionId) => {
+    setActiveSessionId(sessionId)
+    // 如果会话没有消息，加载它们
+    const session = sessions.find(s => s.id === sessionId)
+    if (session && (!session.messages || session.messages.length === 0)) {
+      await loadSessionMessages(sessionId)
+    }
+  }, [sessions, setActiveSessionId, loadSessionMessages])
 
   // 自动创建第一个会话
   useEffect(() => {
@@ -95,7 +106,7 @@ function App() {
         onSettings={() => setShowSettings(true)}
         sessions={sessions}
         activeSessionId={activeSessionId}
-        onSelectSession={setActiveSessionId}
+        onSelectSession={handleSelectSession}
         onCreateSession={handleNewSession}
         onDeleteSession={deleteSession}
         onRenameSession={renameSession}
