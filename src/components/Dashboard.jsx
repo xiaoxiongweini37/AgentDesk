@@ -29,7 +29,6 @@ export default function Dashboard() {
     fetchDashboard()
   }, [])
 
-  // 初始化时滚动到底部
   useEffect(() => {
     agents.forEach(agent => {
       const ref = outputRefs.current[agent.id]
@@ -69,6 +68,10 @@ export default function Dashboard() {
     gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })
   }
 
+  // 只显示在线的agent
+  const onlineAgents = agents.filter(a => a.online)
+  const offlineAgents = agents.filter(a => !a.online)
+
   if (loading) {
     return (
       <div style={{ 
@@ -105,14 +108,26 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{ padding: 20, overflowY: 'auto', height: '100%' }}>
+    <div style={{ padding: 20, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        marginBottom: 20 
+        marginBottom: 20,
+        flexShrink: 0,
       }}>
-        <h2 style={{ color: 'var(--text-primary)' }}>🤖 AI 团队看板</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h2 style={{ color: 'var(--text-primary)', margin: 0 }}>🤖 AI 团队看板</h2>
+          <span style={{ 
+            fontSize: 14, 
+            color: 'var(--text-secondary)',
+            background: 'var(--bg-secondary)',
+            padding: '4px 12px',
+            borderRadius: 'var(--radius)',
+          }}>
+            {onlineAgents.length} 在线 / {agents.length} 总计
+          </span>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button 
             onClick={handleRefresh}
@@ -138,88 +153,122 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-        gap: 16 
-      }}>
-        {agents.map(agent => (
-          <div 
-            key={agent.id}
-            onMouseEnter={handleCardMouseEnter}
-            onMouseLeave={handleCardMouseLeave}
-            style={{
-              background: 'var(--bg-card)',
-              borderRadius: 'var(--radius)',
-              border: '1px solid var(--border)',
-              overflow: 'hidden',
-              cursor: 'default',
-            }}
-          >
-            <div style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--border)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-            }}>
-              <div style={{
-                width: 12,
-                height: 12,
-                borderRadius: '50%',
-                background: agent.online ? 'var(--success)' : 'var(--text-secondary)',
-                boxShadow: agent.online ? '0 0 8px var(--success)' : 'none',
-              }} />
-              <span style={{ 
-                fontSize: 18, 
-                fontWeight: 'bold',
-                color: 'var(--text-primary)',
-              }}>
-                {agent.name}
-              </span>
-              <span style={{ 
-                fontSize: 12, 
-                color: 'var(--text-secondary)',
-              }}>
-                {agent.online ? '运行中' : '离线'}
-              </span>
-              <span style={{ 
-                marginLeft: 'auto',
-                fontSize: 13, 
-                color: 'var(--text-secondary)',
-              }}>
-                {agent.role}
-              </span>
-            </div>
-
-            <div style={{
-              padding: '8px 16px',
-              background: 'var(--bg-secondary)',
-              fontSize: 14,
-              color: 'var(--accent)',
-            }}>
-              📋 {agent.task}
-            </div>
-
+      {/* 在线agent - 动态均分 */}
+      {onlineAgents.length > 0 ? (
+        <div style={{ 
+          display: 'grid', 
+          gridTemplateColumns: `repeat(${onlineAgents.length}, 1fr)`,
+          gap: 16,
+          flex: 1,
+          minHeight: 0,
+        }}>
+          {onlineAgents.map(agent => (
             <div 
-              ref={el => outputRefs.current[agent.id] = el}
+              key={agent.id}
+              onMouseEnter={handleCardMouseEnter}
+              onMouseLeave={handleCardMouseLeave}
               style={{
-                padding: '12px 16px',
-                fontSize: 12,
-                lineHeight: 1.5,
-                color: 'var(--text-secondary)',
-                whiteSpace: 'pre-wrap',
-                wordBreak: 'break-all',
-                maxHeight: 300,
-                overflowY: 'auto',
-                background: 'var(--bg-primary)',
+                background: 'var(--bg-card)',
+                borderRadius: 'var(--radius)',
+                border: '1px solid var(--border)',
+                overflow: 'hidden',
+                cursor: 'default',
+                display: 'flex',
+                flexDirection: 'column',
               }}
             >
-              {agent.output || '无输出'}
+              <div style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid var(--border)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                flexShrink: 0,
+              }}>
+                <div style={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: '50%',
+                  background: 'var(--success)',
+                  boxShadow: '0 0 8px var(--success)',
+                }} />
+                <span style={{ 
+                  fontSize: 18, 
+                  fontWeight: 'bold',
+                  color: 'var(--text-primary)',
+                }}>
+                  {agent.name}
+                </span>
+                <span style={{ 
+                  marginLeft: 'auto',
+                  fontSize: 13, 
+                  color: 'var(--text-secondary)',
+                }}>
+                  {agent.role}
+                </span>
+              </div>
+
+              <div style={{
+                padding: '8px 16px',
+                background: 'var(--bg-secondary)',
+                fontSize: 14,
+                color: 'var(--accent)',
+                flexShrink: 0,
+              }}>
+                📋 {agent.task}
+              </div>
+
+              <div 
+                ref={el => outputRefs.current[agent.id] = el}
+                style={{
+                  padding: '12px 16px',
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  color: 'var(--text-secondary)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-all',
+                  overflowY: 'auto',
+                  background: 'var(--bg-primary)',
+                  flex: 1,
+                }}
+              >
+                {agent.output || '无输出'}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ 
+          flex: 1, 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          color: 'var(--text-secondary)',
+        }}>
+          暂无在线的智能体
+        </div>
+      )}
+
+      {/* 离线agent - 底部小字 */}
+      {offlineAgents.length > 0 && (
+        <div style={{ 
+          marginTop: 16, 
+          paddingTop: 12,
+          borderTop: '1px solid var(--border)',
+          display: 'flex',
+          gap: 16,
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+            离线：
+          </span>
+          {offlineAgents.map(agent => (
+            <span key={agent.id} style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              {agent.name} ({agent.role})
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
