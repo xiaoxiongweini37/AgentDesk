@@ -3,19 +3,46 @@ import { gsap } from '../utils/animations'
 
 export default function Chat({ messages, onSend, onFileUpload, isLoading, streamingText }) {
   const [input, setInput] = useState('')
+  const [autoScroll, setAutoScroll] = useState(true)
+  const [showScrollTop, setShowScrollTop] = useState(false)
   const messagesEndRef = useRef(null)
+  const messagesContainerRef = useRef(null)
   const fileInputRef = useRef(null)
   const lastMessageRef = useRef(null)
 
+  // 自动滚动到底部（只在用户没手动滚动时）
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (autoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
     if (lastMessageRef.current && messages.length > 0) {
       gsap.fromTo(lastMessageRef.current, 
         { y: 20, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.3, ease: 'power2.out' }
       )
     }
-  }, [messages, streamingText])
+  }, [messages, streamingText, autoScroll])
+
+  // 检测用户滚动
+  const handleScroll = () => {
+    const container = messagesContainerRef.current
+    if (!container) return
+    
+    const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50
+    setAutoScroll(atBottom)
+    setShowScrollTop(container.scrollTop > 200)
+  }
+
+  // 回到顶部
+  const scrollToTop = () => {
+    messagesContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // 回到底部
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    setAutoScroll(true)
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -38,19 +65,24 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
           {/* 消息列表 */}
-          <div style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: 20,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 12,
-          }}>
+          <div 
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              position: 'relative',
+            }}
+          >
             {messages.length === 0 && !streamingText && (
               <div style={{
                 textAlign: 'center',
@@ -130,6 +162,64 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
 
             <div ref={messagesEndRef} />
           </div>
+
+          {/* 滚动按钮 */}
+          {(showScrollTop || !autoScroll) && (
+            <div style={{
+              position: 'absolute',
+              right: 20,
+              bottom: 100,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              zIndex: 10,
+            }}>
+              {showScrollTop && (
+                <button
+                  onClick={scrollToTop}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  }}
+                  title="回到顶部"
+                >
+                  ⬆
+                </button>
+              )}
+              {!autoScroll && (
+                <button
+                  onClick={scrollToBottom}
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    background: 'var(--accent)',
+                    border: 'none',
+                    color: 'var(--bg-primary)',
+                    cursor: 'pointer',
+                    fontSize: 16,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                  }}
+                  title="回到底部"
+                >
+                  ⬇
+                </button>
+              )}
+            </div>
+          )}
 
           {/* 输入框 */}
           <form onSubmit={handleSubmit} style={{
