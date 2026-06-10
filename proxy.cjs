@@ -14,11 +14,14 @@ function getCurrentSessionId() {
     const files = fs.readdirSync(sessionsDir)
       .filter(f => f.startsWith('session_') && f.endsWith('.json'))
       .filter(f => !f.includes('api-') && !f.includes('cron_'))
-      .sort()
-      .reverse();
+      .map(f => ({
+        name: f,
+        mtime: fs.statSync(path.join(sessionsDir, f)).mtime
+      }))
+      .sort((a, b) => b.mtime - a.mtime); // 按修改时间降序
     
     for (const file of files) {
-      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
+      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, file.name), 'utf8'));
       if (data.session_id && data.platform === 'cli') {
         return data.session_id;
       }
