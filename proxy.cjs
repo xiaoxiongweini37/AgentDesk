@@ -44,7 +44,6 @@ function getMessagesFromSession(sessionId, limit = 50) {
     const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8'));
     const messages = data.messages || [];
     
-    // 取最近的消息，过滤掉 tool 消息（太冗长）
     return messages
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .slice(-limit)
@@ -55,6 +54,39 @@ function getMessagesFromSession(sessionId, limit = 50) {
       }));
   } catch (err) {
     console.error('Error reading session messages:', err);
+    return [];
+  }
+}
+
+// 从 profile 的 sessions 目录读取最新会话
+function getMessagesFromProfile(profileName, limit = 30) {
+  try {
+    const sessionsDir = `/home/jinzhong/.hermes/profiles/${profileName}/sessions`;
+    if (!fs.existsSync(sessionsDir)) return [];
+    
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.startsWith('session_') && f.endsWith('.json') && !f.includes('cron_'))
+      .map(f => ({
+        name: f,
+        mtime: fs.statSync(path.join(sessionsDir, f)).mtime
+      }))
+      .sort((a, b) => b.mtime - a.mtime);
+    
+    if (files.length === 0) return [];
+    
+    const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, files[0].name), 'utf8'));
+    const messages = data.messages || [];
+    
+    return messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-limit)
+      .map(m => ({
+        role: m.role,
+        content: m.content || '',
+        timestamp: m.timestamp || null,
+      }));
+  } catch (err) {
+    console.error(`Error reading profile ${profileName} messages:`, err);
     return [];
   }
 }
@@ -109,14 +141,14 @@ function getDashboardData() {
   
   const agents = [
     { id: 'commander', name: '总指挥', role: '协调·监控·读图', tmux: null, sessionId: currentSessionId },
-    { id: 'worker', name: 'A号', role: '速度型编码', tmux: 'worker' },
-    { id: 'coder-b', name: 'B号', role: '严谨型编码', tmux: 'coder-b' },
-    { id: 'coder-c', name: 'C号', role: '测试评估', tmux: 'coder-c' },
+    { id: 'worker', name: 'A号', role: '速度型编码', tmux: 'worker', profile: 'worker' },
+    { id: 'coder-b', name: 'B号', role: '严谨型编码', tmux: 'coder-b', profile: 'coder-b' },
+    { id: 'coder-c', name: 'C号', role: '测试评估', tmux: 'coder-c', profile: 'coder-c' },
     { id: 'claude-code', name: 'Claude', role: 'Claude Code CLI', tmux: 'claude-code' },
   ];
   
   return agents.map(agent => {
-    // 总指挥：从会话文件读取结构化数据
+    // Hermes 实例（总指挥）：从主 sessions 目录读取
     if (agent.sessionId) {
       const messages = getMessagesFromSession(agent.sessionId, 20);
       const lastMsg = messages[messages.length - 1];
@@ -126,22 +158,38 @@ function getDashboardData() {
         ...agent,
         online: true,
         task,
-        messages, // 结构化消息，带 role
-        output: null, // 不再使用纯文本输出
+        messages,
+        output: null,
       };
     }
     
-    // 其他 agent：仍然从 tmux 读取（备用）
-    if (!agent.tmux) {
+    // Hermes worker（有 profile）：从 profile sessions 目录读取
+    if (agent.profile) {
+      const online = isSessionActive(agent.tmux);
+      if (!online) {
+        return {
+          ...agent,
+          online: false,
+          task: '离线',
+          messages: [],
+          output: '离线',
+        };
+      }
+      
+      const messages = getMessagesFromProfile(agent.profile, 15);
+      const lastMsg = messages[messages.length - 1];
+      const task = lastMsg ? (lastMsg.role === 'user' ? '等待回复...' : '工作中') : '空闲';
+      
       return {
         ...agent,
-        online: false,
-        task: '未配置',
-        messages: [],
-        output: '离线',
+        online: true,
+        task,
+        messages,
+        output: null,
       };
     }
     
+    // 非 Hermes CLI（Claude Code 等）：从 tmux 读取
     const online = isSessionActive(agent.tmux);
     const output = online ? getTmuxOutput(agent.tmux, 100) : '';
     const task = detectTask(output);
@@ -150,7 +198,7 @@ function getDashboardData() {
       ...agent,
       online,
       task,
-      messages: [], // tmux 模式下没有结构化消息
+      messages: [],
       output: output || '离线',
     };
   });
