@@ -34,7 +34,7 @@ function getThemeColors() {
 // 解析输出行，识别内容类型
 function parseLineType(line) {
   const trimmed = line.trim()
-  if (!trimmed) return null
+  if (!trimmed) return null // 空行返回 null，会延续上一行的类型
   
   // 用户输入（以 > 或 ❯ 开头，或包含 "user:"）
   if (trimmed.startsWith('>') || trimmed.startsWith('❯') || trimmed.includes('[user]')) {
@@ -84,9 +84,27 @@ function ColoredOutput({ output, timestamp }) {
   const lines = output.split('\n')
   const groups = []
   let currentGroup = null
+  let lastNonNullType = 'default' // 记录上一个非空行的类型
   
   lines.forEach((line, i) => {
-    const type = parseLineType(line)
+    let type = parseLineType(line)
+    
+    // 空行延续上一个非空行的类型
+    if (type === null) {
+      type = lastNonNullType
+    } else {
+      lastNonNullType = type
+    }
+    
+    // default 类型合并到相邻的 agent_output
+    if (type === 'default') {
+      // 检查前后是否有 agent_output
+      const prevType = currentGroup?.type
+      if (prevType === 'agent_output') {
+        type = 'agent_output'
+      }
+    }
+    
     const style = CONTENT_COLORS[type] || CONTENT_COLORS.default
     
     if (!currentGroup || currentGroup.type !== type) {
