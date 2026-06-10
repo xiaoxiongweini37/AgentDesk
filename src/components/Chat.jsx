@@ -20,6 +20,34 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     if (content.includes('DELIVERY:')) return false
     if (content.includes('SILENT:')) return false
     return true
+  }).map(msg => {
+    // 处理包含图片描述的用户消息
+    if (msg.role === 'user' && msg.content && msg.content.startsWith('[The user attached an image')) {
+      const content = msg.content
+      // 提取图片描述和实际用户输入
+      const match = content.match(/\[The user attached an image\.\s*Here's what it contains:\s*([\s\S]*?)\]\s*([\s\S]*)/)
+      if (match) {
+        const imageDescription = match[1].trim()
+        const userInput = match[2].trim()
+        // 如果有实际用户输入，只显示用户输入，图片描述作为附件
+        if (userInput) {
+          return {
+            ...msg,
+            content: userInput,
+            hasImage: true,
+            imageDescription: imageDescription,
+          }
+        }
+        // 如果只有图片描述，显示为图片消息
+        return {
+          ...msg,
+          content: '📷 发送了一张图片',
+          hasImage: true,
+          imageDescription: imageDescription,
+        }
+      }
+    }
+    return msg
   })
 
   // 自动滚动到底部（只在用户没手动滚动时）
@@ -126,6 +154,18 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
                   wordBreak: 'break-word',
                   whiteSpace: 'pre-wrap',
                 }}>
+                  {msg.hasImage && (
+                    <div style={{
+                      fontSize: 11,
+                      opacity: 0.7,
+                      marginBottom: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}>
+                      📷 图片
+                    </div>
+                  )}
                   {msg.content}
                 </div>
               </div>
