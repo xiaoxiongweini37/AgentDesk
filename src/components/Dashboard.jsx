@@ -32,11 +32,11 @@ function getThemeColors() {
 }
 
 // 解析输出行，识别内容类型
-function parseLineType(line) {
+function parseLineType(line, prevType) {
   const trimmed = line.trim()
   if (!trimmed) return null // 空行返回 null，会延续上一行的类型
   
-  // 用户输入（以 > 或 ❯ 开头，或包含 "user:"）
+  // 用户输入（以 > 或 ❯ 开头，或包含 "[user]"，或是纯中文长文本）
   if (trimmed.startsWith('>') || trimmed.startsWith('❯') || trimmed.includes('[user]')) {
     return 'user_input'
   }
@@ -69,10 +69,21 @@ function parseLineType(line) {
     return 'thinking'
   }
   
-  // Agent 输出（包含特定标记或长文本）
+  // Agent 输出（包含特定标记）
   if (trimmed.includes('[assistant]') || trimmed.includes('✅') || 
-      trimmed.includes('完成') || trimmed.length > 50) {
+      trimmed.includes('完成') || trimmed.startsWith('---') ||
+      trimmed.startsWith('===') || trimmed.includes('总结') ||
+      trimmed.includes('已提交') || trimmed.includes('已推送')) {
     return 'agent_output'
+  }
+  
+  // 如果上一行是 user_input，且当前行是纯中文（没有英文代码特征），继续作为 user_input
+  if (prevType === 'user_input') {
+    const hasCode = /[a-zA-Z_]+\(|function |const |let |var |import |from |def |class /.test(trimmed)
+    const hasPunctuation = /[{}();=<>]/.test(trimmed)
+    if (!hasCode && !hasPunctuation && /[\u4e00-\u9fa5]/.test(trimmed)) {
+      return 'user_input'
+    }
   }
   
   return 'default'
@@ -87,7 +98,7 @@ function ColoredOutput({ output, timestamp }) {
   let lastNonNullType = 'default' // 记录上一个非空行的类型
   
   lines.forEach((line, i) => {
-    let type = parseLineType(line)
+    let type = parseLineType(line, lastNonNullType)
     
     // 空行延续上一个非空行的类型
     if (type === null) {
