@@ -7,6 +7,36 @@ const API_HOST = 'localhost';
 const API_PORT = 8642;
 const PROXY_PORT = 3001;
 
+// 会话搜索（调用 Python 脚本）
+function searchSessionsFromDb(query, limit = 10) {
+  try {
+    const scriptPath = path.join(__dirname, 'scripts', 'session_search_api.py');
+    const result = execSync(`python3 ${scriptPath} "${query.replace(/"/g, '\\"')}" ${limit}`, {
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    return JSON.parse(result);
+  } catch (err) {
+    console.error('Python search error:', err.message);
+    return [];
+  }
+}
+
+// 获取会话摘要（调用 Python 脚本）
+function getSessionSummaryFromDb(sessionId) {
+  try {
+    const scriptPath = path.join(__dirname, 'scripts', 'session_summary_api.py');
+    const result = execSync(`python3 ${scriptPath} "${sessionId}"`, {
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    return JSON.parse(result);
+  } catch (err) {
+    console.error('Python summary error:', err.message);
+    return null;
+  }
+}
+
 // Function to get current CLI session ID
 function getCurrentSessionId() {
   try {
@@ -155,18 +185,15 @@ function getSessionList(limit = 20) {
       const userMsgs = messages.filter(m => m.role === 'user');
       const assistantMsgs = messages.filter(m => m.role === 'assistant' && m.content);
       
-      // 生成更好的标题：用最后一条有内容的用户消息
       let title = '未命名会话';
       for (let i = userMsgs.length - 1; i >= 0; i--) {
         const content = userMsgs[i].content || '';
-        // 跳过太短或系统消息
         if (content.length > 5 && !content.startsWith('Review the conversation') && !content.startsWith('[IMPORTANT')) {
           title = content.substring(0, 40) + (content.length > 40 ? '...' : '');
           break;
         }
       }
       
-      // 如果还是默认标题，用会话ID的后6位
       if (title === '未命名会话') {
         const sessionId = data.session_id || f.name;
         title = `会话 ${sessionId.slice(-6)}`;
@@ -188,7 +215,7 @@ function getSessionList(limit = 20) {
   }
 }
 
-// 搜索会话
+// 搜索会话（文件回退）
 function searchSessions(query) {
   try {
     const sessionsDir = '/home/jinzhong/.hermes/sessions';
@@ -204,7 +231,6 @@ function searchSessions(query) {
       const messages = data.messages || [];
       const userMsgs = messages.filter(m => m.role === 'user');
       
-      // 搜索标题
       let title = '未命名会话';
       for (let i = userMsgs.length - 1; i >= 0; i--) {
         const content = userMsgs[i].content || '';
@@ -214,7 +240,6 @@ function searchSessions(query) {
         }
       }
       
-      // 搜索消息内容
       let matched = false;
       let matchPreview = '';
       
@@ -226,7 +251,6 @@ function searchSessions(query) {
           const content = msg.content || '';
           if (content.toLowerCase().includes(queryLower)) {
             matched = true;
-            // 找到匹配的内容，截取前后文
             const idx = content.toLowerCase().indexOf(queryLower);
             const start = Math.max(0, idx - 30);
             const end = Math.min(content.length, idx + query.length + 30);
@@ -248,7 +272,7 @@ function searchSessions(query) {
       }
     }
     
-    return results.slice(0, 20); // 最多返回 20 个结果
+    return results.slice(0, 20);
   } catch (err) {
     console.error('Error searching sessions:', err);
     return [];
@@ -267,7 +291,6 @@ function getFullSession(sessionId) {
     const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8'));
     const messages = data.messages || [];
     
-    // 过滤掉 tool 消息，只保留 user 和 assistant
     const filteredMessages = messages
       .filter(m => m.role === 'user' || m.role === 'assistant')
       .map(m => ({
@@ -302,7 +325,6 @@ function getDashboardData() {
   ];
   
   return agents.map(agent => {
-    // Hermes 实例（总指挥）：从主 sessions 目录读取
     if (agent.sessionId) {
       const messages = getMessagesFromSession(agent.sessionId, 100);
       const lastMsg = messages[messages.length - 1];
@@ -317,7 +339,6 @@ function getDashboardData() {
       };
     }
     
-    // Hermes worker（有 profile）：从 profile sessions 目录读取
     if (agent.profile) {
       const online = isSessionActive(agent.tmux);
       if (!online) {
@@ -343,7 +364,6 @@ function getDashboardData() {
       };
     }
     
-    // 非 Hermes CLI（Claude Code 等）：从 tmux 读取
     const online = isSessionActive(agent.tmux);
     const output = online ? getTmuxOutput(agent.tmux, 100) : '';
     const task = detectTask(output);
@@ -367,6 +387,13 @@ const server = http.createServer((req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
     res.end();
+    return;
+  }
+
+  // Handle health endpoint
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', platform: 'hermes-agent' }));
     return;
   }
 
@@ -394,17 +421,40 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Handle session search endpoint
+  // Handle session search endpoint (Python 脚本)
   if (req.url.startsWith('/api/sessions/search')) {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const query = url.searchParams.get('q') || '';
-    const results = searchSessions(query);
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(results));
+    
+    // 优先用 Python 脚本搜索（读 state.db）
+    const dbResults = searchSessionsFromDb(query);
+    if (dbResults.length > 0) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(dbResults));
+    } else {
+      // 回退到文件搜索
+      const fallbackResults = searchSessions(query);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(fallbackResults));
+    }
     return;
   }
 
-  // Handle full session endpoint (including all messages)
+  // Handle session summary endpoint (Python 脚本)
+  if (req.url.match(/^\/api\/sessions\/[^/]+\/summary$/)) {
+    const sessionId = req.url.split('/')[3];
+    const summary = getSessionSummaryFromDb(sessionId);
+    if (summary) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(summary));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Session not found' }));
+    }
+    return;
+  }
+
+  // Handle full session endpoint
   if (req.url.match(/^\/api\/sessions\/[^/]+\/full$/)) {
     const sessionId = req.url.split('/')[3];
     const session = getFullSession(sessionId);
