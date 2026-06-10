@@ -153,13 +153,31 @@ function getSessionList(limit = 20) {
       const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, f.name), 'utf8'));
       const messages = data.messages || [];
       const userMsgs = messages.filter(m => m.role === 'user');
-      const firstUserMsg = userMsgs[0]?.content || '';
-      const title = firstUserMsg.substring(0, 30) || data.title || '未命名会话';
+      const assistantMsgs = messages.filter(m => m.role === 'assistant' && m.content);
+      
+      // 生成更好的标题：用最后一条有内容的用户消息
+      let title = '未命名会话';
+      for (let i = userMsgs.length - 1; i >= 0; i--) {
+        const content = userMsgs[i].content || '';
+        // 跳过太短或系统消息
+        if (content.length > 5 && !content.startsWith('Review the conversation') && !content.startsWith('[IMPORTANT')) {
+          title = content.substring(0, 40) + (content.length > 40 ? '...' : '');
+          break;
+        }
+      }
+      
+      // 如果还是默认标题，用会话ID的后6位
+      if (title === '未命名会话') {
+        const sessionId = data.session_id || f.name;
+        title = `会话 ${sessionId.slice(-6)}`;
+      }
       
       return {
         id: data.session_id || f.name.replace('session_', '').replace('.json', ''),
         title,
         messageCount: messages.length,
+        userCount: userMsgs.length,
+        assistantCount: assistantMsgs.length,
         time: f.mtime.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         platform: data.platform || 'unknown',
       };

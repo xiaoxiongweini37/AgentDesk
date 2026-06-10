@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from '../utils/animations'
-import ConversationHistory from './ConversationHistory'
 
 export default function Chat({ messages, onSend, onFileUpload, isLoading, streamingText }) {
   const [input, setInput] = useState('')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
   const lastMessageRef = useRef(null)
@@ -39,63 +37,11 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     e.preventDefault()
   }
 
-  const handleSelectSession = (session) => {
-    // TODO: 切换会话
-    console.log('选择会话:', session)
-  }
-
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        {/* 会话历史侧边栏 */}
-        <ConversationHistory 
-          isOpen={sidebarOpen}
-          onToggle={() => setSidebarOpen(!sidebarOpen)}
-          onSelectSession={handleSelectSession}
-        />
-
-        {/* 主聊天区域 */}
-        <div 
-          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-        >
-          {/* 顶部工具栏 */}
-          <div style={{
-            padding: '8px 16px',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexShrink: 0,
-            background: 'var(--bg-secondary)',
-          }}>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              title={sidebarOpen ? '收起会话历史' : '展开会话历史'}
-              style={{
-                background: 'none',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 14,
-                padding: '4px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-              }}
-            >
-              {sidebarOpen ? '◀' : '▶'} 📋
-            </button>
-            <span style={{ 
-              fontSize: 13, 
-              color: 'var(--text-secondary)',
-            }}>
-              {messages.length > 0 ? `${messages.length} 条消息` : '新会话'}
-            </span>
-          </div>
-
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+    >
           {/* 消息列表 */}
           <div style={{
             flex: 1,
@@ -248,8 +194,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               {isLoading ? '等待中...' : '发送'}
             </button>
           </form>
-        </div>
-      </div>
 
       <style>{`
         @keyframes blink {
