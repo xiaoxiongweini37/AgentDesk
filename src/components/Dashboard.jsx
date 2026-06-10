@@ -3,6 +3,120 @@ import { gsap } from '../utils/animations'
 
 const API_BASE = 'http://localhost:3001'
 
+// 内容类型颜色配置
+const CONTENT_COLORS = {
+  user_input: { color: '#4fc3f7', bg: 'rgba(79,195,247,0.08)', icon: '👤', label: '用户输入' },
+  agent_output: { color: '#a5d6a7', bg: 'rgba(165,214,167,0.08)', icon: '🤖', label: 'Agent 输出' },
+  file_change: { color: '#ffcc80', bg: 'rgba(255,204,128,0.08)', icon: '📝', label: '文件改动' },
+  error: { color: '#ef9a9a', bg: 'rgba(239,154,154,0.08)', icon: '❌', label: '错误' },
+  thinking: { color: '#ce93d8', bg: 'rgba(206,147,216,0.08)', icon: '💭', label: '思考中' },
+  tool_call: { color: '#90caf9', bg: 'rgba(144,202,249,0.08)', icon: '🔧', label: '工具调用' },
+  default: { color: 'var(--text-secondary)', bg: 'transparent', icon: '📄', label: '' },
+}
+
+// 解析输出行，识别内容类型
+function parseLineType(line) {
+  const trimmed = line.trim()
+  if (!trimmed) return null
+  
+  // 用户输入（以 > 或 ❯ 开头，或包含 "user:"）
+  if (trimmed.startsWith('>') || trimmed.startsWith('❯') || trimmed.includes('[user]')) {
+    return 'user_input'
+  }
+  
+  // 错误信息
+  if (trimmed.includes('Error') || trimmed.includes('error') || trimmed.includes('ERROR') || 
+      trimmed.includes('❌') || trimmed.includes('failed') || trimmed.includes('Failed')) {
+    return 'error'
+  }
+  
+  // 文件改动（git diff、文件路径等）
+  if (trimmed.includes('diff --git') || trimmed.includes('@@') || 
+      trimmed.match(/^[+-]{2,3}\s/) || trimmed.includes('modified:') || 
+      trimmed.includes('new file:') || trimmed.includes('deleted:') ||
+      trimmed.includes('commit') || trimmed.includes('Committer')) {
+    return 'file_change'
+  }
+  
+  // 工具调用
+  if (trimmed.includes('execute_code') || trimmed.includes('terminal(') || 
+      trimmed.includes('read_file') || trimmed.includes('write_file') ||
+      trimmed.includes('search_files') || trimmed.includes('browser_') ||
+      trimmed.includes('🔧') || trimmed.includes('⚙️')) {
+    return 'tool_call'
+  }
+  
+  // 思考中
+  if (trimmed.includes('deliberating') || trimmed.includes('💭') || 
+      trimmed.includes('thinking') || trimmed.includes('🤔')) {
+    return 'thinking'
+  }
+  
+  // Agent 输出（包含特定标记或长文本）
+  if (trimmed.includes('[assistant]') || trimmed.includes('✅') || 
+      trimmed.includes('完成') || trimmed.length > 50) {
+    return 'agent_output'
+  }
+  
+  return 'default'
+}
+
+// 渲染带颜色的输出块
+function ColoredOutput({ output, timestamp }) {
+  const lines = output.split('\n')
+  const groups = []
+  let currentGroup = null
+  
+  lines.forEach((line, i) => {
+    const type = parseLineType(line)
+    const style = CONTENT_COLORS[type] || CONTENT_COLORS.default
+    
+    if (!currentGroup || currentGroup.type !== type) {
+      currentGroup = { type, lines: [line], style }
+      groups.push(currentGroup)
+    } else {
+      currentGroup.lines.push(line)
+    }
+  })
+  
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ 
+        fontSize: 10, 
+        color: 'var(--text-secondary)', 
+        opacity: 0.6,
+        marginBottom: 4,
+      }}>
+        [{timestamp}]
+      </div>
+      {groups.map((group, gi) => {
+        const style = group.style
+        return (
+          <div key={gi} style={{
+            padding: '4px 8px',
+            marginBottom: 2,
+            background: style.bg,
+            borderLeft: style.color !== 'var(--text-secondary)' ? `3px solid ${style.color}` : 'none',
+            borderRadius: '0 4px 4px 0',
+          }}>
+            {style.icon && style.icon !== '📄' && (
+              <span style={{ marginRight: 6, fontSize: 11 }}>{style.icon}</span>
+            )}
+            <span style={{ 
+              color: style.color, 
+              fontSize: 12,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}>
+              {group.lines.join('\n')}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -33,14 +147,17 @@ export default function Dashboard() {
         setAgents(prev => {
           return data.map(newAgent => {
             const oldAgent = prev.find(a => a.id === newAgent.id)
-            if (!oldAgent) return { ...newAgent, history: [newAgent.output] }
+            if (!oldAgent) return { 
+              ...newAgent, 
+              history: newAgent.output ? [{ text: newAgent.output, time: new Date().toLocaleTimeString() }] : [] 
+            }
             
             // 如果输出有变化，追加到历史
-            const lastOutput = oldAgent.history?.[oldAgent.history.length - 1]
-            if (newAgent.output && newAgent.output !== lastOutput) {
+            const lastText = oldAgent.history?.[oldAgent.history.length - 1]?.text
+            if (newAgent.output && newAgent.output !== lastText) {
               return {
                 ...newAgent,
-                history: [...(oldAgent.history || []), newAgent.output],
+                history: [...(oldAgent.history || []), { text: newAgent.output, time: new Date().toLocaleTimeString() }],
               }
             }
             return { ...oldAgent, ...newAgent }
@@ -50,7 +167,7 @@ export default function Dashboard() {
         // 首次加载：初始化历史
         setAgents(data.map(agent => ({
           ...agent,
-          history: agent.output ? [agent.output] : [],
+          history: agent.output ? [{ text: agent.output, time: new Date().toLocaleTimeString() }] : [],
         })))
       }
     } catch (err) {
@@ -77,7 +194,7 @@ export default function Dashboard() {
   }, [agents, autoScroll])
 
   const handleRefresh = () => {
-    fetchDashboard(true) // 追加模式
+    fetchDashboard(true)
   }
 
   const handleClear = (agentId) => {
@@ -198,6 +315,31 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* 颜色图例 */}
+      <div style={{
+        display: 'flex',
+        gap: 16,
+        marginBottom: 16,
+        padding: '8px 12px',
+        background: 'var(--bg-secondary)',
+        borderRadius: 'var(--radius)',
+        flexShrink: 0,
+        flexWrap: 'wrap',
+      }}>
+        {Object.entries(CONTENT_COLORS).filter(([k]) => k !== 'default').map(([key, style]) => (
+          <span key={key} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+            <span style={{ 
+              width: 12, 
+              height: 12, 
+              borderRadius: 2, 
+              background: style.color,
+              display: 'inline-block',
+            }} />
+            <span style={{ color: 'var(--text-secondary)' }}>{style.label}</span>
+          </span>
+        ))}
+      </div>
+
       {/* 在线agent - 动态均分 */}
       {onlineAgents.length > 0 ? (
         <div style={{ 
@@ -284,29 +426,21 @@ export default function Dashboard() {
                   padding: '12px 16px',
                   fontSize: 12,
                   lineHeight: 1.5,
-                  color: 'var(--text-secondary)',
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-all',
                   overflowY: 'auto',
                   background: 'var(--bg-primary)',
                   flex: 1,
                 }}
               >
                 {(agent.history || []).length > 0 ? (
-                  agent.history.map((output, i) => (
-                    <div key={i} style={{
-                      paddingBottom: 8,
-                      marginBottom: 8,
-                      borderBottom: i < agent.history.length - 1 ? '1px dashed var(--border)' : 'none',
-                    }}>
-                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', opacity: 0.6 }}>
-                        [{new Date().toLocaleTimeString()}]
-                      </span>
-                      {'\n'}{output}
-                    </div>
+                  agent.history.map((entry, i) => (
+                    <ColoredOutput 
+                      key={i} 
+                      output={entry.text} 
+                      timestamp={entry.time}
+                    />
                   ))
                 ) : (
-                  <span style={{ opacity: 0.5 }}>无输出</span>
+                  <span style={{ opacity: 0.5, color: 'var(--text-secondary)' }}>无输出</span>
                 )}
               </div>
             </div>
