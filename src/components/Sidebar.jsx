@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
-import { gsap } from '../utils/animations'
+import { useState } from 'react'
 
 const tabs = [
   { id: 'chat', icon: '💬', label: '对话' },
@@ -9,56 +8,21 @@ const tabs = [
 ]
 
 export default function Sidebar({ activeTab, onTabChange }) {
-  const sidebarRef = useRef(null)
-  const buttonsRef = useRef([])
-
-  useEffect(() => {
-    // 侧边栏入场动画
-    gsap.from(sidebarRef.current, {
-      x: -60,
-      autoAlpha: 0,
-      duration: 0.5,
-      ease: 'power2.out',
-    })
-
-    // 按钮交错动画
-    gsap.from(buttonsRef.current, {
-      x: -30,
-      autoAlpha: 0,
-      duration: 0.4,
-      ease: 'power2.out',
-      stagger: 0.1,
-      delay: 0.2,
-    })
-  }, [])
-
-  const handleTabClick = (tabId, index) => {
-    // 点击动画
-    gsap.to(buttonsRef.current[index], {
-      scale: 0.9,
-      duration: 0.1,
-      ease: 'power2.inOut',
-      yoyo: true,
-      repeat: 1,
-    })
-    
+  const handleClick = (tabId) => {
     onTabChange(tabId)
   }
 
   return (
-    <aside
-      ref={sidebarRef}
-      style={{
-        width: 60,
-        background: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '16px 0',
-        gap: 8,
-      }}
-    >
+    <aside style={{
+      width: 60,
+      background: 'var(--bg-secondary)',
+      borderRight: '1px solid var(--border)',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      padding: '16px 0',
+      gap: 8,
+    }}>
       {/* Logo */}
       <div style={{
         fontSize: 24,
@@ -69,11 +33,10 @@ export default function Sidebar({ activeTab, onTabChange }) {
       </div>
 
       {/* Tabs */}
-      {tabs.map((tab, index) => (
+      {tabs.map(tab => (
         <button
           key={tab.id}
-          ref={el => buttonsRef.current[index] = el}
-          onClick={() => handleTabClick(tab.id, index)}
+          onClick={() => handleClick(tab.id)}
           title={tab.label}
           style={{
             width: 44,

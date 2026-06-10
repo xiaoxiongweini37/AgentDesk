@@ -1,44 +1,17 @@
 import { useState, useRef, useEffect } from 'react'
-import { gsap } from '../utils/animations'
 
 export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
-  const containerRef = useRef(null)
-  const inputRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // 新消息入场动画
-  useEffect(() => {
-    if (messages.length > 0) {
-      const lastMessage = containerRef.current?.lastElementChild
-      if (lastMessage) {
-        gsap.from(lastMessage, {
-          y: 20,
-          autoAlpha: 0,
-          duration: 0.4,
-          ease: 'power2.out',
-        })
-      }
-    }
-  }, [messages])
-
   const handleSubmit = (e) => {
     e.preventDefault()
     if (input.trim() && !isLoading) {
-      // 发送按钮动画
-      gsap.to(inputRef.current, {
-        scale: 0.95,
-        duration: 0.1,
-        ease: 'power2.inOut',
-        yoyo: true,
-        repeat: 1,
-      })
-      
       onSend(input.trim())
       setInput('')
     }
@@ -48,12 +21,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files)
     if (files.length > 0) {
-      // 拖拽提示动画
-      gsap.from(e.currentTarget, {
-        borderColor: 'var(--accent)',
-        duration: 0.5,
-        ease: 'power2.out',
-      })
       onFileUpload(files)
     }
   }
@@ -73,17 +40,14 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
       onDragOver={handleDragOver}
     >
       {/* Messages */}
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: 20,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 12,
-        }}
-      >
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        padding: 20,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 12,
+      }}>
         {messages.length === 0 && (
           <div style={{
             textAlign: 'center',
@@ -166,7 +130,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
           📎
         </button>
         <input
-          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="输入消息... (拖拽文件可直接上传)"

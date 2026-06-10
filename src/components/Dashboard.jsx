@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from 'react'
-import { gsap } from '../utils/animations'
 
 const API_BASE = 'http://localhost:3001'
 
@@ -9,8 +8,6 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   const outputRefs = useRef({})
-  const containerRef = useRef(null)
-  const cardsRef = useRef([])
 
   const fetchDashboard = async () => {
     try {
@@ -33,20 +30,6 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
-  // 卡片入场动画
-  useEffect(() => {
-    if (agents.length > 0 && containerRef.current) {
-      gsap.from(cardsRef.current, {
-        y: 30,
-        autoAlpha: 0,
-        duration: 0.5,
-        ease: 'power2.out',
-        stagger: 0.1,
-      })
-    }
-  }, [agents])
-
-  // 自动滚动到底部
   useEffect(() => {
     agents.forEach(agent => {
       const ref = outputRefs.current[agent.id]
@@ -55,16 +38,6 @@ export default function Dashboard() {
       }
     })
   }, [agents])
-
-  const handleRefresh = () => {
-    // 刷新按钮动画
-    gsap.to('.refresh-btn', {
-      rotation: 360,
-      duration: 0.5,
-      ease: 'power2.inOut',
-    })
-    fetchDashboard()
-  }
 
   if (loading) {
     return (
@@ -77,12 +50,7 @@ export default function Dashboard() {
         justifyContent: 'center',
         height: '100%',
       }}>
-        <div style={{
-          fontSize: 24,
-          animation: 'pulse 1.5s ease-in-out infinite',
-        }}>
-          🔄 加载中...
-        </div>
+        🔄 加载中...
       </div>
     )
   }
@@ -107,14 +75,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div 
-      ref={containerRef}
-      style={{ 
-        padding: 20, 
-        overflowY: 'auto', 
-        height: '100%',
-      }}
-    >
+    <div style={{ padding: 20, overflowY: 'auto', height: '100%' }}>
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -124,8 +85,7 @@ export default function Dashboard() {
         <h2 style={{ color: 'var(--text-primary)' }}>🤖 AI 团队看板</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button 
-            className="refresh-btn"
-            onClick={handleRefresh}
+            onClick={fetchDashboard}
             style={{
               padding: '8px 16px',
               background: 'var(--accent)',
@@ -134,9 +94,6 @@ export default function Dashboard() {
               color: 'var(--bg-primary)',
               cursor: 'pointer',
               fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
             }}
           >
             🔄 刷新
@@ -154,35 +111,16 @@ export default function Dashboard() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: 16 
       }}>
-        {agents.map((agent, index) => (
+        {agents.map(agent => (
           <div 
             key={agent.id}
-            ref={el => cardsRef.current[index] = el}
             style={{
               background: 'var(--bg-card)',
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               overflow: 'hidden',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              gsap.to(e.currentTarget, {
-                y: -4,
-                boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
-                duration: 0.2,
-                ease: 'power2.out',
-              })
-            }}
-            onMouseLeave={(e) => {
-              gsap.to(e.currentTarget, {
-                y: 0,
-                boxShadow: 'none',
-                duration: 0.2,
-                ease: 'power2.out',
-              })
             }}
           >
-            {/* 卡片头部 */}
             <div style={{
               padding: '12px 16px',
               borderBottom: '1px solid var(--border)',
@@ -195,7 +133,6 @@ export default function Dashboard() {
                 height: 12,
                 borderRadius: '50%',
                 background: agent.online ? 'var(--success)' : 'var(--text-secondary)',
-                boxShadow: agent.online ? '0 0 8px var(--success)' : 'none',
               }} />
               <span style={{ 
                 fontSize: 18, 
@@ -219,7 +156,6 @@ export default function Dashboard() {
               </span>
             </div>
 
-            {/* 任务状态 */}
             <div style={{
               padding: '8px 16px',
               background: 'var(--bg-secondary)',
@@ -229,7 +165,6 @@ export default function Dashboard() {
               📋 {agent.task}
             </div>
 
-            {/* 输出内容 */}
             <div 
               ref={el => outputRefs.current[agent.id] = el}
               style={{
@@ -249,13 +184,6 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-      `}</style>
     </div>
   )
 }
