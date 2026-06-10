@@ -135,6 +135,41 @@ function detectTask(output) {
   return '💤 空闲';
 }
 
+// 获取会话列表
+function getSessionList(limit = 20) {
+  try {
+    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.startsWith('session_') && f.endsWith('.json'))
+      .filter(f => !f.includes('api-') && !f.includes('cron_'))
+      .map(f => {
+        const stat = fs.statSync(path.join(sessionsDir, f));
+        return { name: f, mtime: stat.mtime, size: stat.size };
+      })
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, limit);
+    
+    return files.map(f => {
+      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, f.name), 'utf8'));
+      const messages = data.messages || [];
+      const userMsgs = messages.filter(m => m.role === 'user');
+      const firstUserMsg = userMsgs[0]?.content || '';
+      const title = firstUserMsg.substring(0, 30) || data.title || '未命名会话';
+      
+      return {
+        id: data.session_id || f.name.replace('session_', '').replace('.json', ''),
+        title,
+        messageCount: messages.length,
+        time: f.mtime.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        platform: data.platform || 'unknown',
+      };
+    });
+  } catch (err) {
+    console.error('Error reading sessions:', err);
+    return [];
+  }
+}
+
 // Dashboard data endpoint - 从会话文件读取结构化数据
 function getDashboardData() {
   const currentSessionId = getCurrentSessionId();
@@ -227,6 +262,14 @@ const server = http.createServer((req, res) => {
   // Handle dashboard endpoint
   if (req.url === '/api/dashboard') {
     const data = getDashboardData();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+    return;
+  }
+
+  // Handle sessions list endpoint
+  if (req.url === '/api/sessions') {
+    const data = getSessionList();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
     return;
