@@ -9,7 +9,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   const outputRefs = useRef({})
-  const cardsRef = useRef({})
+  const isAtBottomRef = useRef({})
 
   const fetchDashboard = async () => {
     try {
@@ -32,20 +32,40 @@ export default function Dashboard() {
     return () => clearInterval(interval)
   }, [])
 
+  // 智能滚动：只在用户已经在底部时才自动滚动
   useEffect(() => {
     agents.forEach(agent => {
       const ref = outputRefs.current[agent.id]
-      if (ref) {
+      if (ref && isAtBottomRef.current[agent.id]) {
         ref.scrollTop = ref.scrollHeight
       }
     })
   }, [agents])
 
+  // 检测用户是否在底部
+  const handleScroll = (agentId) => {
+    const ref = outputRefs.current[agentId]
+    if (ref) {
+      const threshold = 50 // 距离底部50px内算"在底部"
+      isAtBottomRef.current[agentId] = 
+        ref.scrollHeight - ref.scrollTop - ref.clientHeight < threshold
+    }
+  }
+
+  // 初始化时标记为在底部
+  const initRef = (agentId, el) => {
+    outputRefs.current[agentId] = el
+    if (el) {
+      isAtBottomRef.current[agentId] = true
+      el.scrollTop = el.scrollHeight
+    }
+  }
+
   const handleRefresh = () => {
     fetchDashboard()
   }
 
-  const handleCardMouseEnter = (e, id) => {
+  const handleCardMouseEnter = (e) => {
     gsap.to(e.currentTarget, {
       y: -4,
       boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
@@ -148,8 +168,7 @@ export default function Dashboard() {
         {agents.map(agent => (
           <div 
             key={agent.id}
-            ref={el => cardsRef.current[agent.id] = el}
-            onMouseEnter={(e) => handleCardMouseEnter(e, agent.id)}
+            onMouseEnter={handleCardMouseEnter}
             onMouseLeave={handleCardMouseLeave}
             style={{
               background: 'var(--bg-card)',
@@ -205,7 +224,8 @@ export default function Dashboard() {
             </div>
 
             <div 
-              ref={el => outputRefs.current[agent.id] = el}
+              ref={el => initRef(agent.id, el)}
+              onScroll={() => handleScroll(agent.id)}
               style={{
                 padding: '12px 16px',
                 fontSize: 12,
