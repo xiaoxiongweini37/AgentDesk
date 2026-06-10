@@ -8,16 +8,51 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [autoScroll, setAutoScroll] = useState(true)
   const outputRefs = useRef({})
+  const userScrolledRef = useRef({})
 
-  const fetchDashboard = async () => {
+  // 检测用户是否手动滚动
+  const handleScroll = (agentId) => {
+    const el = outputRefs.current[agentId]
+    if (!el) return
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 30
+    userScrolledRef.current[agentId] = !atBottom
+  }
+
+  const fetchDashboard = async (append = false) => {
     try {
       const response = await fetch(`${API_BASE}/api/dashboard`)
       if (!response.ok) throw new Error('Failed to fetch dashboard')
       const data = await response.json()
-      setAgents(data)
       setLastUpdate(new Date())
       setError(null)
+
+      if (append) {
+        // 追加模式：合并新数据到旧数据
+        setAgents(prev => {
+          return data.map(newAgent => {
+            const oldAgent = prev.find(a => a.id === newAgent.id)
+            if (!oldAgent) return { ...newAgent, history: [newAgent.output] }
+            
+            // 如果输出有变化，追加到历史
+            const lastOutput = oldAgent.history?.[oldAgent.history.length - 1]
+            if (newAgent.output && newAgent.output !== lastOutput) {
+              return {
+                ...newAgent,
+                history: [...(oldAgent.history || []), newAgent.output],
+              }
+            }
+            return { ...oldAgent, ...newAgent }
+          })
+        })
+      } else {
+        // 首次加载：初始化历史
+        setAgents(data.map(agent => ({
+          ...agent,
+          history: agent.output ? [agent.output] : [],
+        })))
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -26,20 +61,30 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    fetchDashboard()
+    fetchDashboard(false)
   }, [])
 
+  // 自动滚动到底部（只在用户没手动滚动时）
   useEffect(() => {
     agents.forEach(agent => {
-      const ref = outputRefs.current[agent.id]
-      if (ref) {
-        ref.scrollTop = ref.scrollHeight
+      if (autoScroll && !userScrolledRef.current[agent.id]) {
+        const ref = outputRefs.current[agent.id]
+        if (ref) {
+          ref.scrollTop = ref.scrollHeight
+        }
       }
     })
-  }, [loading])
+  }, [agents, autoScroll])
 
   const handleRefresh = () => {
-    fetchDashboard()
+    fetchDashboard(true) // 追加模式
+  }
+
+  const handleClear = (agentId) => {
+    setAgents(prev => prev.map(a => 
+      a.id === agentId ? { ...a, history: [] } : a
+    ))
+    userScrolledRef.current[agentId] = false
   }
 
   const handleCardMouseEnter = (e) => {
@@ -206,6 +251,20 @@ export default function Dashboard() {
                 }}>
                   {agent.role}
                 </span>
+                <button
+                  onClick={() => handleClear(agent.id)}
+                  title="清除历史"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                    padding: '2px 6px',
+                  }}
+                >
+                  🗑️
+                </button>
               </div>
 
               <div style={{
@@ -220,6 +279,7 @@ export default function Dashboard() {
 
               <div 
                 ref={el => outputRefs.current[agent.id] = el}
+                onScroll={() => handleScroll(agent.id)}
                 style={{
                   padding: '12px 16px',
                   fontSize: 12,
@@ -232,7 +292,22 @@ export default function Dashboard() {
                   flex: 1,
                 }}
               >
-                {agent.output || '无输出'}
+                {(agent.history || []).length > 0 ? (
+                  agent.history.map((output, i) => (
+                    <div key={i} style={{
+                      paddingBottom: 8,
+                      marginBottom: 8,
+                      borderBottom: i < agent.history.length - 1 ? '1px dashed var(--border)' : 'none',
+                    }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-secondary)', opacity: 0.6 }}>
+                        [{new Date().toLocaleTimeString()}]
+                      </span>
+                      {'\n'}{output}
+                    </div>
+                  ))
+                ) : (
+                  <span style={{ opacity: 0.5 }}>无输出</span>
+                )}
               </div>
             </div>
           ))}
