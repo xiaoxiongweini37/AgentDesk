@@ -1,12 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
+import { gsap } from '../utils/animations'
 
 export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
+  const lastMessageRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // 新消息入场动画
+    if (lastMessageRef.current && messages.length > 0) {
+      gsap.fromTo(lastMessageRef.current, 
+        { y: 20, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.3, ease: 'power2.out' }
+      )
+    }
   }, [messages])
 
   const handleSubmit = (e) => {
@@ -29,17 +38,22 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
     e.preventDefault()
   }
 
+  const handleSendHover = (e) => {
+    if (!isLoading && input.trim()) {
+      gsap.to(e.currentTarget, { scale: 1.05, duration: 0.2 })
+    }
+  }
+
+  const handleSendLeave = (e) => {
+    gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })
+  }
+
   return (
     <div 
-      style={{ 
-        flex: 1, 
-        display: 'flex', 
-        flexDirection: 'column',
-      }}
+      style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
-      {/* Messages */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
@@ -64,6 +78,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
         {messages.map((msg, i) => (
           <div
             key={i}
+            ref={i === messages.length - 1 ? lastMessageRef : null}
             style={{
               display: 'flex',
               justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
@@ -99,7 +114,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <form onSubmit={handleSubmit} style={{
         padding: '16px 20px',
         borderTop: '1px solid var(--border)',
@@ -116,6 +130,8 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
+          onMouseEnter={(e) => gsap.to(e.currentTarget, { scale: 1.1, duration: 0.2 })}
+          onMouseLeave={(e) => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
           style={{
             padding: '8px 12px',
             border: '1px solid var(--border)',
@@ -149,6 +165,8 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading }) {
         <button
           type="submit"
           disabled={!input.trim() || isLoading}
+          onMouseEnter={handleSendHover}
+          onMouseLeave={handleSendLeave}
           style={{
             padding: '8px 20px',
             border: 'none',

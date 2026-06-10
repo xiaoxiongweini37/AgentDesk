@@ -1,9 +1,11 @@
 import { useState, useRef } from 'react'
+import { gsap } from '../utils/animations'
 
 export default function FileUpload({ onUpload }) {
   const [files, setFiles] = useState([])
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef(null)
+  const dropZoneRef = useRef(null)
 
   const handleFiles = (newFiles) => {
     const fileList = Array.from(newFiles).map(file => ({
@@ -20,6 +22,14 @@ export default function FileUpload({ onUpload }) {
   const handleDrop = (e) => {
     e.preventDefault()
     setIsDragging(false)
+    // 拖拽成功动画
+    gsap.to(dropZoneRef.current, {
+      scale: 1.02,
+      duration: 0.2,
+      ease: 'power2.inOut',
+      yoyo: true,
+      repeat: 1,
+    })
     handleFiles(e.dataTransfer.files)
   }
 
@@ -32,8 +42,14 @@ export default function FileUpload({ onUpload }) {
     setIsDragging(false)
   }
 
-  const removeFile = (id) => {
-    setFiles(prev => prev.filter(f => f.id !== id))
+  const removeFile = (e, id) => {
+    gsap.to(e.currentTarget.closest('.file-item'), {
+      x: 50,
+      opacity: 0,
+      duration: 0.3,
+      ease: 'power2.in',
+      onComplete: () => setFiles(prev => prev.filter(f => f.id !== id))
+    })
   }
 
   const formatSize = (bytes) => {
@@ -50,15 +66,34 @@ export default function FileUpload({ onUpload }) {
     return '📎'
   }
 
+  const handleItemHover = (e) => {
+    gsap.to(e.currentTarget, {
+      x: 4,
+      borderColor: 'var(--accent)',
+      duration: 0.2,
+    })
+  }
+
+  const handleItemLeave = (e) => {
+    gsap.to(e.currentTarget, {
+      x: 0,
+      borderColor: 'var(--border)',
+      duration: 0.2,
+    })
+  }
+
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: '0 auto' }}>
       <h2 style={{ marginBottom: 20, color: 'var(--text-primary)' }}>📁 文件管理</h2>
 
       <div
+        ref={dropZoneRef}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={() => fileInputRef.current?.click()}
+        onMouseEnter={(e) => gsap.to(e.currentTarget, { scale: 1.01, duration: 0.2 })}
+        onMouseLeave={(e) => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
         style={{
           padding: 40,
           border: `2px dashed ${isDragging ? 'var(--accent)' : 'var(--border)'}`,
@@ -96,6 +131,9 @@ export default function FileUpload({ onUpload }) {
             {files.map(file => (
               <div
                 key={file.id}
+                className="file-item"
+                onMouseEnter={handleItemHover}
+                onMouseLeave={handleItemLeave}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -114,7 +152,7 @@ export default function FileUpload({ onUpload }) {
                   </div>
                 </div>
                 <button
-                  onClick={() => removeFile(file.id)}
+                  onClick={(e) => removeFile(e, file.id)}
                   style={{
                     background: 'none',
                     border: 'none',

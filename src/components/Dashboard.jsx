@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { gsap } from '../utils/animations'
 
 const API_BASE = 'http://localhost:3001'
 
@@ -8,6 +9,7 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   const outputRefs = useRef({})
+  const cardsRef = useRef({})
 
   const fetchDashboard = async () => {
     try {
@@ -38,6 +40,36 @@ export default function Dashboard() {
       }
     })
   }, [agents])
+
+  const handleRefresh = () => {
+    fetchDashboard()
+  }
+
+  const handleCardMouseEnter = (e, id) => {
+    gsap.to(e.currentTarget, {
+      y: -4,
+      boxShadow: '0 8px 16px rgba(0,0,0,0.3)',
+      duration: 0.2,
+      ease: 'power2.out',
+    })
+  }
+
+  const handleCardMouseLeave = (e) => {
+    gsap.to(e.currentTarget, {
+      y: 0,
+      boxShadow: 'none',
+      duration: 0.2,
+      ease: 'power2.out',
+    })
+  }
+
+  const handleRefreshHover = (e) => {
+    gsap.to(e.currentTarget, { scale: 1.05, duration: 0.2 })
+  }
+
+  const handleRefreshLeave = (e) => {
+    gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })
+  }
 
   if (loading) {
     return (
@@ -85,7 +117,9 @@ export default function Dashboard() {
         <h2 style={{ color: 'var(--text-primary)' }}>🤖 AI 团队看板</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button 
-            onClick={fetchDashboard}
+            onClick={handleRefresh}
+            onMouseEnter={handleRefreshHover}
+            onMouseLeave={handleRefreshLeave}
             style={{
               padding: '8px 16px',
               background: 'var(--accent)',
@@ -114,11 +148,15 @@ export default function Dashboard() {
         {agents.map(agent => (
           <div 
             key={agent.id}
+            ref={el => cardsRef.current[agent.id] = el}
+            onMouseEnter={(e) => handleCardMouseEnter(e, agent.id)}
+            onMouseLeave={handleCardMouseLeave}
             style={{
               background: 'var(--bg-card)',
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               overflow: 'hidden',
+              cursor: 'default',
             }}
           >
             <div style={{
@@ -133,6 +171,7 @@ export default function Dashboard() {
                 height: 12,
                 borderRadius: '50%',
                 background: agent.online ? 'var(--success)' : 'var(--text-secondary)',
+                boxShadow: agent.online ? '0 0 8px var(--success)' : 'none',
               }} />
               <span style={{ 
                 fontSize: 18, 

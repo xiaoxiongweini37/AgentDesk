@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { gsap } from '../utils/animations'
 
 export default function TaskList() {
   const [tasks, setTasks] = useState([
@@ -7,6 +8,7 @@ export default function TaskList() {
     { id: 3, title: '示例任务 3', status: 'completed', priority: 'low' },
   ])
   const [newTask, setNewTask] = useState('')
+  const listRef = useRef(null)
 
   const addTask = () => {
     if (newTask.trim()) {
@@ -20,7 +22,16 @@ export default function TaskList() {
     }
   }
 
-  const toggleStatus = (id) => {
+  const toggleStatus = (e, id) => {
+    // 点击动画
+    gsap.to(e.currentTarget, {
+      scale: 0.9,
+      duration: 0.1,
+      ease: 'power2.inOut',
+      yoyo: true,
+      repeat: 1,
+    })
+    
     setTasks(prev => prev.map(t => {
       if (t.id === id) {
         const nextStatus = {
@@ -34,8 +45,30 @@ export default function TaskList() {
     }))
   }
 
-  const deleteTask = (id) => {
-    setTasks(prev => prev.filter(t => t.id !== id))
+  const deleteTask = (e, id) => {
+    gsap.to(e.currentTarget.closest('.task-item'), {
+      x: 50,
+      opacity: 0,
+      duration: 0.3,
+      ease: 'power2.in',
+      onComplete: () => setTasks(prev => prev.filter(t => t.id !== id))
+    })
+  }
+
+  const handleItemHover = (e) => {
+    gsap.to(e.currentTarget, {
+      x: 4,
+      borderColor: 'var(--accent)',
+      duration: 0.2,
+    })
+  }
+
+  const handleItemLeave = (e) => {
+    gsap.to(e.currentTarget, {
+      x: 0,
+      borderColor: 'var(--border)',
+      duration: 0.2,
+    })
   }
 
   const statusColors = {
@@ -73,6 +106,8 @@ export default function TaskList() {
         />
         <button
           onClick={addTask}
+          onMouseEnter={(e) => gsap.to(e.currentTarget, { scale: 1.05, duration: 0.2 })}
+          onMouseLeave={(e) => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
           style={{
             padding: '8px 20px',
             border: 'none',
@@ -87,10 +122,13 @@ export default function TaskList() {
         </button>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={listRef} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {tasks.map(task => (
           <div
             key={task.id}
+            className="task-item"
+            onMouseEnter={handleItemHover}
+            onMouseLeave={handleItemLeave}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -102,7 +140,7 @@ export default function TaskList() {
             }}
           >
             <button
-              onClick={() => toggleStatus(task.id)}
+              onClick={(e) => toggleStatus(e, task.id)}
               style={{
                 width: 24,
                 height: 24,
@@ -139,7 +177,7 @@ export default function TaskList() {
             </span>
 
             <button
-              onClick={() => deleteTask(task.id)}
+              onClick={(e) => deleteTask(e, task.id)}
               style={{
                 background: 'none',
                 border: 'none',

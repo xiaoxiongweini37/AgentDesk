@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { gsap } from '../utils/animations'
 
 const tabs = [
   { id: 'chat', icon: '💬', label: '对话' },
@@ -8,8 +9,32 @@ const tabs = [
 ]
 
 export default function Sidebar({ activeTab, onTabChange }) {
-  const handleClick = (tabId) => {
+  const handleClick = (e, tabId) => {
+    // 点击动画
+    gsap.to(e.currentTarget, {
+      scale: 0.9,
+      duration: 0.1,
+      ease: 'power2.inOut',
+      yoyo: true,
+      repeat: 1,
+    })
     onTabChange(tabId)
+  }
+
+  const handleMouseEnter = (e) => {
+    gsap.to(e.currentTarget, {
+      scale: 1.1,
+      duration: 0.2,
+      ease: 'power2.out',
+    })
+  }
+
+  const handleMouseLeave = (e) => {
+    gsap.to(e.currentTarget, {
+      scale: 1,
+      duration: 0.2,
+      ease: 'power2.out',
+    })
   }
 
   return (
@@ -23,7 +48,6 @@ export default function Sidebar({ activeTab, onTabChange }) {
       padding: '16px 0',
       gap: 8,
     }}>
-      {/* Logo */}
       <div style={{
         fontSize: 24,
         marginBottom: 16,
@@ -32,11 +56,12 @@ export default function Sidebar({ activeTab, onTabChange }) {
         🤖
       </div>
 
-      {/* Tabs */}
       {tabs.map(tab => (
         <button
           key={tab.id}
-          onClick={() => handleClick(tab.id)}
+          onClick={(e) => handleClick(e, tab.id)}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           title={tab.label}
           style={{
             width: 44,
@@ -50,17 +75,17 @@ export default function Sidebar({ activeTab, onTabChange }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'background 0.2s, color 0.2s',
           }}
         >
           {tab.icon}
         </button>
       ))}
 
-      {/* Bottom section */}
       <div style={{ marginTop: 'auto' }}>
         <button
           title="设置"
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           style={{
             width: 44,
             height: 44,
