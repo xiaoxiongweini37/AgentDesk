@@ -6,6 +6,7 @@ import FileUpload from './components/FileUpload'
 import Dashboard from './components/Dashboard'
 import Settings from './components/Settings'
 import ContextPanel from './components/ContextPanel'
+import SessionSearch from './components/SessionSearch'
 import { useHermes } from './hooks/useHermes'
 import { useSessions } from './hooks/useSessions'
 
@@ -13,6 +14,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [showSettings, setShowSettings] = useState(false)
   const [showContextPanel, setShowContextPanel] = useState(true)
+  const [showSessionSearch, setShowSessionSearch] = useState(false)
   const { sendMessageStream, isLoading, error, streamingText } = useHermes()
 
   const {
@@ -100,6 +102,13 @@ function App() {
     setActiveTab('chat')
   }
 
+  // 加载历史会话
+  const handleLoadSession = (session) => {
+    // 创建新会话并加载历史消息
+    const sessionId = createSession()
+    updateSessionMessages(sessionId, session.messages)
+  }
+
   return (
     <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-primary)' }}>
       {/* 左侧边栏 - 任务列表 */}
@@ -115,6 +124,7 @@ function App() {
         onRenameSession={renameSession}
         onRefreshSessions={refreshSessions}
         onToggleContext={() => setShowContextPanel(v => !v)}
+        onOpenSessionSearch={() => setShowSessionSearch(true)}
       />
 
       {/* 中间 - 对话区域 */}
@@ -151,6 +161,13 @@ function App() {
       )}
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
+
+      {/* 会话搜索弹窗 */}
+      <SessionSearch
+        isOpen={showSessionSearch}
+        onClose={() => setShowSessionSearch(false)}
+        onLoadSession={handleLoadSession}
+      />
     </div>
   )
 }

@@ -188,6 +188,107 @@ function getSessionList(limit = 20) {
   }
 }
 
+// 搜索会话
+function searchSessions(query) {
+  try {
+    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.startsWith('session_') && f.endsWith('.json'))
+      .filter(f => !f.includes('api-') && !f.includes('cron_'));
+    
+    const results = [];
+    const queryLower = query.toLowerCase();
+    
+    for (const f of files) {
+      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf8'));
+      const messages = data.messages || [];
+      const userMsgs = messages.filter(m => m.role === 'user');
+      
+      // 搜索标题
+      let title = '未命名会话';
+      for (let i = userMsgs.length - 1; i >= 0; i--) {
+        const content = userMsgs[i].content || '';
+        if (content.length > 5 && !content.startsWith('Review the conversation') && !content.startsWith('[IMPORTANT')) {
+          title = content.substring(0, 40) + (content.length > 40 ? '...' : '');
+          break;
+        }
+      }
+      
+      // 搜索消息内容
+      let matched = false;
+      let matchPreview = '';
+      
+      if (title.toLowerCase().includes(queryLower)) {
+        matched = true;
+        matchPreview = title;
+      } else {
+        for (const msg of messages) {
+          const content = msg.content || '';
+          if (content.toLowerCase().includes(queryLower)) {
+            matched = true;
+            // 找到匹配的内容，截取前后文
+            const idx = content.toLowerCase().indexOf(queryLower);
+            const start = Math.max(0, idx - 30);
+            const end = Math.min(content.length, idx + query.length + 30);
+            matchPreview = (start > 0 ? '...' : '') + content.substring(start, end) + (end < content.length ? '...' : '');
+            break;
+          }
+        }
+      }
+      
+      if (matched) {
+        const stat = fs.statSync(path.join(sessionsDir, f));
+        results.push({
+          id: data.session_id || f.replace('session_', '').replace('.json', ''),
+          title,
+          matchPreview,
+          messageCount: messages.length,
+          time: stat.mtime.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
+        });
+      }
+    }
+    
+    return results.slice(0, 20); // 最多返回 20 个结果
+  } catch (err) {
+    console.error('Error searching sessions:', err);
+    return [];
+  }
+}
+
+// 获取完整会话（包括所有消息）
+function getFullSession(sessionId) {
+  try {
+    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.includes(sessionId) && f.endsWith('.json'));
+    
+    if (files.length === 0) return null;
+    
+    const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, files[0]), 'utf8'));
+    const messages = data.messages || [];
+    
+    // 过滤掉 tool 消息，只保留 user 和 assistant
+    const filteredMessages = messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({
+        role: m.role,
+        content: m.content || '',
+        timestamp: m.timestamp || null,
+      }));
+    
+    return {
+      id: data.session_id || sessionId,
+      messages: filteredMessages,
+      totalMessages: messages.length,
+      userCount: messages.filter(m => m.role === 'user').length,
+      assistantCount: messages.filter(m => m.role === 'assistant').length,
+    };
+  } catch (err) {
+    console.error('Error reading full session:', err);
+    return null;
+  }
+}
+
 // Dashboard data endpoint - 从会话文件读取结构化数据
 function getDashboardData() {
   const currentSessionId = getCurrentSessionId();
@@ -290,6 +391,30 @@ const server = http.createServer((req, res) => {
     const data = getSessionList();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
+    return;
+  }
+
+  // Handle session search endpoint
+  if (req.url.startsWith('/api/sessions/search')) {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const query = url.searchParams.get('q') || '';
+    const results = searchSessions(query);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(results));
+    return;
+  }
+
+  // Handle full session endpoint (including all messages)
+  if (req.url.match(/^\/api\/sessions\/[^/]+\/full$/)) {
+    const sessionId = req.url.split('/')[3];
+    const session = getFullSession(sessionId);
+    if (session) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(session));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Session not found' }));
+    }
     return;
   }
 

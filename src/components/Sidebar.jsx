@@ -52,6 +52,7 @@ export default function Sidebar({
   onRenameSession,
   onRefreshSessions,
   onToggleContext,
+  onOpenSessionSearch,
 }) {
   const [expanded, setExpanded] = useState(false)
   const [search, setSearch] = useState('')
@@ -168,28 +169,48 @@ export default function Sidebar({
 
         {/* 新建会话按钮 - 仅 chat tab 且展开时显示 */}
         {activeTab === 'chat' && expanded && (
-          <button
-            onClick={onCreateSession}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              background: 'transparent',
-              color: 'var(--text-primary)',
-              cursor: 'pointer',
-              fontSize: 13,
-              whiteSpace: 'nowrap',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-          >
-            <span style={{ fontSize: 16 }}>✏️</span>
-            新建对话
-          </button>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              onClick={onCreateSession}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: 'transparent',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                fontSize: 13,
+                whiteSpace: 'nowrap',
+                transition: 'background 0.15s',
+                flex: 1,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              <span style={{ fontSize: 16 }}>✏️</span>
+              新建对话
+            </button>
+            <button
+              onClick={onOpenSessionSearch}
+              title="搜索历史会话"
+              style={{
+                padding: '8px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 16,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+            >
+              🔍
+            </button>
+          </div>
         )}
         {/* 折叠状态下的新建按钮 */}
         {activeTab === 'chat' && !expanded && (
