@@ -13,6 +13,20 @@
   --radius: 8px;
 }
 
+[data-theme="light"] {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --text-primary: #1a1a1a;
+  --text-secondary: #666666;
+  --accent: #0078d4;
+  --accent-hover: #006abc;
+  --success: #00a854;
+  --warning: #ff8c00;
+  --error: #d32f2f;
+  --border: #e0e0e0;
+}
+
 * {
   margin: 0;
   padding: 0;

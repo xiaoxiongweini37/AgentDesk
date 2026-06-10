@@ -75,7 +75,7 @@ export default function Settings({ onClose }) {
   const handleThemeChange = (e) => {
     setTheme(e.target.value)
     localStorage.setItem('agentdesk-theme', e.target.value)
-    // TODO: 实际切换主题
+    document.documentElement.setAttribute('data-theme', e.target.value)
   }
 
   const clearLocalMessages = () => {
