@@ -36,9 +36,14 @@ function parseLineType(line, prevType) {
   const trimmed = line.trim()
   if (!trimmed) return null // 空行返回 null，会延续上一行的类型
   
-  // 用户输入（以 > 或 ❯ 开头，或包含 "[user]"，或是纯中文长文本）
+  // 用户输入（以 > 或 ❯ 开头，或包含 "[user]"，或 "worker》" 等 agent 前缀）
   if (trimmed.startsWith('>') || trimmed.startsWith('❯') || trimmed.includes('[user]')) {
     return 'user_input'
+  }
+  
+  // Agent 前缀标记（worker》、coder-b》、claude》等）- 这些是子 agent 的输出
+  if (/^[a-zA-Z-]+》/.test(trimmed) || /^[a-zA-Z-]+>/.test(trimmed)) {
+    return 'agent_output'
   }
   
   // 错误信息
@@ -47,11 +52,25 @@ function parseLineType(line, prevType) {
     return 'error'
   }
   
-  // 文件改动（git diff、文件路径等）
+  // 文件改动（git diff、文件路径、SQL 等）
   if (trimmed.includes('diff --git') || trimmed.includes('@@') || 
       trimmed.match(/^[+-]{2,3}\s/) || trimmed.includes('modified:') || 
       trimmed.includes('new file:') || trimmed.includes('deleted:') ||
-      trimmed.includes('commit') || trimmed.includes('Committer')) {
+      trimmed.includes('commit') || trimmed.includes('Committer') ||
+      trimmed.includes('ADD COLUMN') || trimmed.includes('ALTER TABLE') ||
+      trimmed.includes('CREATE TABLE') || trimmed.includes('INSERT INTO') ||
+      trimmed.includes('SELECT ') || trimmed.includes('UPDATE ') ||
+      trimmed.includes('varchar') || trimmed.includes('int(') ||
+      trimmed.includes('DEFAULT NULL') || trimmed.includes('COMMENT')) {
+    return 'file_change'
+  }
+  
+  // 文件路径
+  if (trimmed.match(/^[A-Z]:\\/) || trimmed.match(/^\/mnt\//) || 
+      trimmed.match(/^\/home\//) || trimmed.match(/^~\//) ||
+      trimmed.includes('.csv') || trimmed.includes('.sql') || 
+      trimmed.includes('.py') || trimmed.includes('.json') ||
+      trimmed.includes('.pdf') || trimmed.includes('.xlsx')) {
     return 'file_change'
   }
   
@@ -65,24 +84,33 @@ function parseLineType(line, prevType) {
   
   // 思考中
   if (trimmed.includes('deliberating') || trimmed.includes('💭') || 
-      trimmed.includes('thinking') || trimmed.includes('🤔')) {
+      trimmed.includes('thinking') || trimmed.includes('🤔') ||
+      trimmed.includes('musing')) {
     return 'thinking'
   }
   
-  // Agent 输出（包含特定标记）
+  // Agent 输出标记
   if (trimmed.includes('[assistant]') || trimmed.includes('✅') || 
       trimmed.includes('完成') || trimmed.startsWith('---') ||
       trimmed.startsWith('===') || trimmed.includes('总结') ||
-      trimmed.includes('已提交') || trimmed.includes('已推送')) {
+      trimmed.includes('已提交') || trimmed.includes('已推送') ||
+      trimmed.includes('Hermes') || trimmed.includes('Self-improvement')) {
     return 'agent_output'
   }
   
-  // 如果上一行是 user_input，且当前行是纯中文（没有英文代码特征），继续作为 user_input
-  if (prevType === 'user_input') {
-    const hasCode = /[a-zA-Z_]+\(|function |const |let |var |import |from |def |class /.test(trimmed)
-    const hasPunctuation = /[{}();=<>]/.test(trimmed)
-    if (!hasCode && !hasPunctuation && /[\u4e00-\u9fa5]/.test(trimmed)) {
-      return 'user_input'
+  // 纯中文句子（没有英文代码特征）- 可能是用户输入
+  const hasChinese = /[\u4e00-\u9fa5]/.test(trimmed)
+  const hasEnglish = /[a-zA-Z]{3,}/.test(trimmed)
+  const hasCode = /[{}();=<>]/.test(trimmed) || /[a-zA-Z_]+\(/.test(trimmed)
+  
+  if (hasChinese && !hasCode) {
+    // 纯中文或中文为主的句子
+    if (!hasEnglish || trimmed.length > 20) {
+      // 如果上一行是 agent_output 或 default，这可能是用户输入
+      // 如果上一行是 user_input，继续作为 user_input
+      if (prevType === 'user_input' || prevType === 'default' || prevType === null) {
+        return 'user_input'
+      }
     }
   }
   
@@ -107,12 +135,12 @@ function ColoredOutput({ output, timestamp }) {
       lastNonNullType = type
     }
     
-    // default 类型合并到相邻的 agent_output
+    // default 类型：检查前后行，决定归属
     if (type === 'default') {
-      // 检查前后是否有 agent_output
-      const prevType = currentGroup?.type
-      if (prevType === 'agent_output') {
-        type = 'agent_output'
+      const prevGroupType = currentGroup?.type
+      // 如果前一个组是 user_input，且当前行是中文，归为 user_input
+      if (prevGroupType === 'user_input' && /[\u4e00-\u9fa5]/.test(line)) {
+        type = 'user_input'
       }
     }
     
