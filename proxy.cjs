@@ -33,7 +33,7 @@ function getCurrentSessionId() {
 }
 
 // 从会话文件读取结构化消息
-function getMessagesFromSession(sessionId, limit = 50) {
+function getMessagesFromSession(sessionId, limit = 100) {
   try {
     const sessionsDir = '/home/jinzhong/.hermes/sessions';
     const files = fs.readdirSync(sessionsDir)
@@ -59,7 +59,7 @@ function getMessagesFromSession(sessionId, limit = 50) {
 }
 
 // 从 profile 的 sessions 目录读取最新会话
-function getMessagesFromProfile(profileName, limit = 30) {
+function getMessagesFromProfile(profileName, limit = 100) {
   try {
     const sessionsDir = `/home/jinzhong/.hermes/profiles/${profileName}/sessions`;
     if (!fs.existsSync(sessionsDir)) return [];
@@ -150,7 +150,7 @@ function getDashboardData() {
   return agents.map(agent => {
     // Hermes 实例（总指挥）：从主 sessions 目录读取
     if (agent.sessionId) {
-      const messages = getMessagesFromSession(agent.sessionId, 20);
+      const messages = getMessagesFromSession(agent.sessionId, 100);
       const lastMsg = messages[messages.length - 1];
       const task = lastMsg ? (lastMsg.role === 'user' ? '等待回复...' : '工作中') : '空闲';
       
@@ -176,7 +176,7 @@ function getDashboardData() {
         };
       }
       
-      const messages = getMessagesFromProfile(agent.profile, 15);
+      const messages = getMessagesFromProfile(agent.profile, 100);
       const lastMsg = messages[messages.length - 1];
       const task = lastMsg ? (lastMsg.role === 'user' ? '等待回复...' : '工作中') : '空闲';
       
