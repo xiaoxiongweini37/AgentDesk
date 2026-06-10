@@ -51,6 +51,7 @@ export default function Sidebar({
   onDeleteSession,
   onRenameSession,
   onRefreshSessions,
+  onToggleContext,
 }) {
   const [expanded, setExpanded] = useState(false)
   const [search, setSearch] = useState('')

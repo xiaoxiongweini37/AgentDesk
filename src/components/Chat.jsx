@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from '../utils/animations'
 
-export default function Chat({ messages, onSend, onFileUpload, isLoading, streamingText }) {
+export default function Chat({ messages, onSend, onFileUpload, isLoading, streamingText, showContextPanel, onToggleContext }) {
   const [input, setInput] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
   const [showScrollTop, setShowScrollTop] = useState(false)
@@ -227,6 +227,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
             borderTop: '1px solid var(--border)',
             display: 'flex',
             gap: 12,
+            alignItems: 'center',
           }}>
             <input
               type="file"
@@ -282,6 +283,22 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               }}
             >
               {isLoading ? '等待中...' : '发送'}
+            </button>
+            <button
+              type="button"
+              onClick={onToggleContext}
+              style={{
+                padding: '8px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: showContextPanel ? 'var(--accent)' : 'var(--bg-secondary)',
+                color: showContextPanel ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              title={showContextPanel ? '隐藏面板' : '显示面板'}
+            >
+              ☰
             </button>
           </form>
 

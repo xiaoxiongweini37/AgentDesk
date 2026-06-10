@@ -5,12 +5,14 @@ import TaskList from './components/TaskList'
 import FileUpload from './components/FileUpload'
 import Dashboard from './components/Dashboard'
 import Settings from './components/Settings'
+import ContextPanel from './components/ContextPanel'
 import { useHermes } from './hooks/useHermes'
 import { useSessions } from './hooks/useSessions'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [showSettings, setShowSettings] = useState(false)
+  const [showContextPanel, setShowContextPanel] = useState(true)
   const { sendMessageStream, isLoading, error, streamingText } = useHermes()
 
   const {
@@ -99,7 +101,8 @@ function App() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
+    <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-primary)' }}>
+      {/* 左侧边栏 - 任务列表 */}
       <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -111,13 +114,16 @@ function App() {
         onDeleteSession={deleteSession}
         onRenameSession={renameSession}
         onRefreshSessions={refreshSessions}
+        onToggleContext={() => setShowContextPanel(v => !v)}
       />
 
+      {/* 中间 - 对话区域 */}
       <main style={{
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        minWidth: 0,
       }}>
         {activeTab === 'chat' && (
           <Chat
@@ -127,12 +133,22 @@ function App() {
             onFileUpload={handleFileUpload}
             isLoading={isLoading}
             streamingText={streamingText}
+            showContextPanel={showContextPanel}
+            onToggleContext={() => setShowContextPanel(v => !v)}
           />
         )}
         {activeTab === 'tasks' && <TaskList />}
         {activeTab === 'files' && <FileUpload onUpload={handleFileUpload} />}
         {activeTab === 'dashboard' && <Dashboard />}
       </main>
+
+      {/* 右侧 - 功能面板 */}
+      {activeTab === 'chat' && showContextPanel && (
+        <ContextPanel
+          sessionId={activeSessionId}
+          onClose={() => setShowContextPanel(false)}
+        />
+      )}
 
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
     </div>
