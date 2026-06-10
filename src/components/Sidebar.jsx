@@ -14,7 +14,23 @@ function groupSessions(sessions) {
   const groups = { '今天': [], '昨天': [], '最近7天': [], '更早': [] }
 
   sessions.forEach(s => {
-    const diff = now - s.updatedAt
+    // 尝试解析时间字符串
+    let updatedAt = s.updatedAt
+    if (!updatedAt && s.time) {
+      // 解析 "6/10 14:18" 格式
+      const match = s.time.match(/(\d+)\/(\d+)\s+(\d+):(\d+)/)
+      if (match) {
+        const [, month, day, hour, minute] = match
+        const date = new Date()
+        date.setMonth(parseInt(month) - 1)
+        date.setDate(parseInt(day))
+        date.setHours(parseInt(hour), parseInt(minute), 0, 0)
+        updatedAt = date.getTime()
+      }
+    }
+    if (!updatedAt) updatedAt = Date.now()
+
+    const diff = now - updatedAt
     if (diff < day) groups['今天'].push(s)
     else if (diff < 2 * day) groups['昨天'].push(s)
     else if (diff < 7 * day) groups['最近7天'].push(s)
@@ -34,6 +50,7 @@ export default function Sidebar({
   onCreateSession,
   onDeleteSession,
   onRenameSession,
+  onRefreshSessions,
 }) {
   const [expanded, setExpanded] = useState(false)
   const [search, setSearch] = useState('')
@@ -51,6 +68,10 @@ export default function Sidebar({
         duration: 0.3,
         ease: 'power2.inOut',
       })
+    }
+    // 展开时刷新会话列表
+    if (expanded && onRefreshSessions) {
+      onRefreshSessions()
     }
   }, [expanded])
 

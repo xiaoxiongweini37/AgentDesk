@@ -22,6 +22,8 @@ function App() {
     deleteSession,
     updateSessionMessages,
     renameSession,
+    refreshSessions,
+    loading,
   } = useSessions()
 
   const messages = activeSession?.messages || []
@@ -97,6 +99,7 @@ function App() {
         onCreateSession={handleNewSession}
         onDeleteSession={deleteSession}
         onRenameSession={renameSession}
+        onRefreshSessions={refreshSessions}
       />
 
       <main style={{
