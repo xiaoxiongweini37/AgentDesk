@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { gsap } from '../utils/animations'
 
 const API_BASE = 'http://localhost:3001'
 
@@ -8,6 +9,8 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
   const outputRefs = useRef({})
+  const containerRef = useRef(null)
+  const cardsRef = useRef([])
 
   const fetchDashboard = async () => {
     try {
@@ -26,9 +29,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboard()
-    const interval = setInterval(fetchDashboard, 5000) // 每5秒刷新
+    const interval = setInterval(fetchDashboard, 5000)
     return () => clearInterval(interval)
   }, [])
+
+  // 卡片入场动画
+  useEffect(() => {
+    if (agents.length > 0 && containerRef.current) {
+      gsap.from(cardsRef.current, {
+        y: 30,
+        autoAlpha: 0,
+        duration: 0.5,
+        ease: 'power2.out',
+        stagger: 0.1,
+      })
+    }
+  }, [agents])
 
   // 自动滚动到底部
   useEffect(() => {
@@ -40,24 +56,65 @@ export default function Dashboard() {
     })
   }, [agents])
 
+  const handleRefresh = () => {
+    // 刷新按钮动画
+    gsap.to('.refresh-btn', {
+      rotation: 360,
+      duration: 0.5,
+      ease: 'power2.inOut',
+    })
+    fetchDashboard()
+  }
+
   if (loading) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-secondary)' }}>
-        加载中...
+      <div style={{ 
+        padding: 20, 
+        textAlign: 'center', 
+        color: 'var(--text-secondary)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+      }}>
+        <div style={{
+          fontSize: 24,
+          animation: 'pulse 1.5s ease-in-out infinite',
+        }}>
+          🔄 加载中...
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div style={{ padding: 20, textAlign: 'center', color: 'var(--error)' }}>
-        错误: {error}
+      <div style={{ 
+        padding: 20, 
+        textAlign: 'center', 
+        color: 'var(--error)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+      }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>❌</div>
+        <div style={{ fontSize: 18, marginBottom: 8 }}>错误</div>
+        <div style={{ fontSize: 14 }}>{error}</div>
       </div>
     )
   }
 
   return (
-    <div style={{ padding: 20, overflowY: 'auto', height: '100%' }}>
+    <div 
+      ref={containerRef}
+      style={{ 
+        padding: 20, 
+        overflowY: 'auto', 
+        height: '100%',
+      }}
+    >
       <div style={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -67,7 +124,8 @@ export default function Dashboard() {
         <h2 style={{ color: 'var(--text-primary)' }}>🤖 AI 团队看板</h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button 
-            onClick={fetchDashboard}
+            className="refresh-btn"
+            onClick={handleRefresh}
             style={{
               padding: '8px 16px',
               background: 'var(--accent)',
@@ -76,6 +134,9 @@ export default function Dashboard() {
               color: 'var(--bg-primary)',
               cursor: 'pointer',
               fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
             }}
           >
             🔄 刷新
@@ -93,14 +154,32 @@ export default function Dashboard() {
         gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
         gap: 16 
       }}>
-        {agents.map(agent => (
+        {agents.map((agent, index) => (
           <div 
             key={agent.id}
+            ref={el => cardsRef.current[index] = el}
             style={{
               background: 'var(--bg-card)',
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
               overflow: 'hidden',
+              transition: 'transform 0.2s, box-shadow 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              gsap.to(e.currentTarget, {
+                y: -4,
+                boxShadow: '0 8px 16px rgba(0,0,0,0.2)',
+                duration: 0.2,
+                ease: 'power2.out',
+              })
+            }}
+            onMouseLeave={(e) => {
+              gsap.to(e.currentTarget, {
+                y: 0,
+                boxShadow: 'none',
+                duration: 0.2,
+                ease: 'power2.out',
+              })
             }}
           >
             {/* 卡片头部 */}
@@ -170,6 +249,13 @@ export default function Dashboard() {
           </div>
         ))}
       </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
     </div>
   )
 }

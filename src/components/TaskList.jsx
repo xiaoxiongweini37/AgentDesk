@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { gsap } from '../utils/animations'
 
 export default function TaskList() {
   const [tasks, setTasks] = useState([
@@ -7,16 +8,46 @@ export default function TaskList() {
     { id: 3, title: '示例任务 3', status: 'completed', priority: 'low' },
   ])
   const [newTask, setNewTask] = useState('')
+  const containerRef = useRef(null)
+  const inputRef = useRef(null)
+
+  // 任务列表入场动画
+  useEffect(() => {
+    if (containerRef.current) {
+      const items = containerRef.current.querySelectorAll('.task-item')
+      gsap.from(items, {
+        x: -30,
+        autoAlpha: 0,
+        duration: 0.4,
+        ease: 'power2.out',
+        stagger: 0.1,
+      })
+    }
+  }, [])
 
   const addTask = () => {
     if (newTask.trim()) {
+      const newId = Date.now()
       setTasks(prev => [...prev, {
-        id: Date.now(),
+        id: newId,
         title: newTask.trim(),
         status: 'pending',
         priority: 'medium',
       }])
       setNewTask('')
+      
+      // 新任务入场动画
+      setTimeout(() => {
+        const newItem = containerRef.current?.querySelector(`[data-id="${newId}"]`)
+        if (newItem) {
+          gsap.from(newItem, {
+            x: -50,
+            autoAlpha: 0,
+            duration: 0.5,
+            ease: 'back.out(1.7)',
+          })
+        }
+      }, 10)
     }
   }
 
@@ -32,10 +63,34 @@ export default function TaskList() {
       }
       return t
     }))
+    
+    // 状态切换动画
+    const item = containerRef.current?.querySelector(`[data-id="${id}"]`)
+    if (item) {
+      gsap.to(item, {
+        scale: 1.02,
+        duration: 0.2,
+        ease: 'power2.inOut',
+        yoyo: true,
+        repeat: 1,
+      })
+    }
   }
 
   const deleteTask = (id) => {
-    setTasks(prev => prev.filter(t => t.id !== id))
+    // 删除动画
+    const item = containerRef.current?.querySelector(`[data-id="${id}"]`)
+    if (item) {
+      gsap.to(item, {
+        x: 50,
+        autoAlpha: 0,
+        duration: 0.3,
+        ease: 'power2.in',
+        onComplete: () => {
+          setTasks(prev => prev.filter(t => t.id !== id))
+        },
+      })
+    }
   }
 
   const statusColors = {
@@ -52,11 +107,12 @@ export default function TaskList() {
 
   return (
     <div style={{ padding: 20, maxWidth: 800, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 20 }}>📋 任务列表</h2>
+      <h2 style={{ marginBottom: 20, color: 'var(--text-primary)' }}>📋 任务列表</h2>
 
       {/* Add task */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
         <input
+          ref={inputRef}
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addTask()}
@@ -89,10 +145,15 @@ export default function TaskList() {
       </div>
 
       {/* Task list */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div 
+        ref={containerRef}
+        style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+      >
         {tasks.map(task => (
           <div
             key={task.id}
+            data-id={task.id}
+            className="task-item"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -101,6 +162,19 @@ export default function TaskList() {
               background: 'var(--bg-card)',
               borderRadius: 'var(--radius)',
               border: '1px solid var(--border)',
+              transition: 'border-color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              gsap.to(e.currentTarget, {
+                borderColor: 'var(--accent)',
+                duration: 0.2,
+              })
+            }}
+            onMouseLeave={(e) => {
+              gsap.to(e.currentTarget, {
+                borderColor: 'var(--border)',
+                duration: 0.2,
+              })
             }}
           >
             <button
