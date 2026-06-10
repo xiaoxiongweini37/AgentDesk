@@ -143,6 +143,15 @@ const server = http.createServer((req, res) => {
   delete headers.referer;
   headers.host = `${API_HOST}:${API_PORT}`;
 
+  // 对于聊天请求，强制注入正确的 CLI session ID
+  // 这样 exe/前端不需要知道 session_id，代理服务器自动处理
+  if (req.url === '/v1/chat/completions') {
+    const currentSessionId = getCurrentSessionId();
+    if (currentSessionId) {
+      headers['x-hermes-session-id'] = currentSessionId;
+    }
+  }
+
   const options = {
     hostname: API_HOST,
     port: API_PORT,
