@@ -745,6 +745,35 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  // Handle agent report endpoint
+  if (req.url === '/api/agents/report' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const report = JSON.parse(body);
+        const scriptPath = process.env.HOME + '/.hermes/scripts/agent_report.py';
+        let cmd = `python3 ${scriptPath} ${report.agent} ${report.type}`;
+        
+        if (report.type === 'result') {
+          cmd += ` ${report.task_id || 'null'} "${(report.result || '').replace(/"/g, '\\"')}" ${report.status || 'success'}`;
+        } else if (report.type === 'error') {
+          cmd += ` "${(report.error || '').replace(/"/g, '\\"')}" "${(report.context || '').replace(/"/g, '\\"')}"`;
+        } else if (report.type === 'status') {
+          cmd += ` "${(report.status || '').replace(/"/g, '\\"')}" ${report.progress || ''}`;
+        }
+        
+        const result = execSync(cmd, { encoding: 'utf8', timeout: 10000 });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(result);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Handle agent task queue endpoint
   if (req.url.match(/^\/api\/tasks\/queue\/[^/]+$/) && req.method === 'GET') {
     const agentId = req.url.split('/')[4]
