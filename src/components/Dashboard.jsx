@@ -463,23 +463,32 @@ export default function Dashboard() {
               )}
               
               <div style={{ padding: '8px 16px', background: 'var(--bg-secondary)', fontSize: 14, color: 'var(--accent)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span>📋 {agent.task}</span>
+                <span>📋 {agent.realTimeStatus?.detail || agent.task}</span>
                 {agent.realTimeStatus && (
                   <span style={{
                     marginLeft: 'auto',
                     fontSize: 11,
                     padding: '2px 8px',
-                    background: agent.realTimeStatus.activity === 'working' ? 'rgba(76,175,80,0.2)' :
-                               agent.realTimeStatus.activity === 'thinking' ? 'rgba(255,152,0,0.2)' :
+                    background: agent.realTimeStatus.activity === 'working' || agent.realTimeStatus.activity === 'executing' ? 'rgba(76,175,80,0.2)' :
+                               agent.realTimeStatus.activity === 'thinking' || agent.realTimeStatus.activity === 'preparing' ? 'rgba(255,152,0,0.2)' :
                                agent.realTimeStatus.activity === 'error' ? 'rgba(244,67,54,0.2)' :
+                               agent.realTimeStatus.activity === 'idle' ? 'rgba(33,150,243,0.2)' :
                                'rgba(158,158,158,0.2)',
-                    color: agent.realTimeStatus.activity === 'working' ? '#4caf50' :
-                           agent.realTimeStatus.activity === 'thinking' ? '#ff9800' :
+                    color: agent.realTimeStatus.activity === 'working' || agent.realTimeStatus.activity === 'executing' ? '#4caf50' :
+                           agent.realTimeStatus.activity === 'thinking' || agent.realTimeStatus.activity === 'preparing' ? '#ff9800' :
                            agent.realTimeStatus.activity === 'error' ? '#f44336' :
+                           agent.realTimeStatus.activity === 'idle' ? '#2196f3' :
                            '#9e9e9e',
                     borderRadius: 4,
+                    fontWeight: 'bold',
                   }}>
-                    {agent.realTimeStatus.detail || agent.realTimeStatus.activity || ''}
+                    {agent.realTimeStatus.activity === 'idle' ? '💤 空闲' :
+                     agent.realTimeStatus.activity === 'working' ? '⚡ 工作中' :
+                     agent.realTimeStatus.activity === 'thinking' ? '💭 思考中' :
+                     agent.realTimeStatus.activity === 'executing' ? '⚙️ 执行中' :
+                     agent.realTimeStatus.activity === 'error' ? '❌ 错误' :
+                     agent.realTimeStatus.activity === 'offline' ? '⚫ 离线' :
+                     agent.realTimeStatus.detail || ''}
                   </span>
                 )}
               </div>
