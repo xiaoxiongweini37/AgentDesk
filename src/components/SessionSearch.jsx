@@ -2,6 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 
 const API_BASE = 'http://localhost:3001'
 
+const AGENTS = [
+  { id: 'commander', name: '总指挥', icon: '🎯' },
+  { id: 'worker', name: 'A号', icon: '⚡' },
+  { id: 'coder-b', name: 'B号', icon: '🔧' },
+  { id: 'coder-c', name: 'C号', icon: '🧪' },
+]
+
 export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
@@ -9,17 +16,22 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
   const [selectedSession, setSelectedSession] = useState(null)
   const [fullSession, setFullSession] = useState(null)
   const [loadingFull, setLoadingFull] = useState(false)
+  const [selectedAgent, setSelectedAgent] = useState(null) // null = 全部
 
   // 搜索会话
   const handleSearch = useCallback(async () => {
-    if (!query.trim()) {
+    if (!query.trim() && !selectedAgent) {
       setResults([])
       return
     }
 
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/sessions/search?q=${encodeURIComponent(query)}`)
+      let url = `${API_BASE}/api/sessions/search?q=${encodeURIComponent(query)}`
+      if (selectedAgent) {
+        url += `&agent=${selectedAgent}`
+      }
+      const res = await fetch(url)
       const data = await res.json()
       setResults(data)
     } catch (err) {
@@ -27,19 +39,19 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
       setResults([])
     }
     setLoading(false)
-  }, [query])
+  }, [query, selectedAgent])
 
   // 搜索防抖
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (query.trim()) {
+      if (query.trim() || selectedAgent) {
         handleSearch()
       } else {
         setResults([])
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [query, handleSearch])
+  }, [query, selectedAgent, handleSearch])
 
   // 加载完整会话
   const handleLoadFullSession = async (sessionId) => {
@@ -64,6 +76,17 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
     }
   }
 
+  // 获取 Agent 名称
+  const getAgentName = (agentId) => {
+    const agent = AGENTS.find(a => a.id === agentId)
+    return agent ? agent.name : '总指挥'
+  }
+
+  const getAgentIcon = (agentId) => {
+    const agent = AGENTS.find(a => a.id === agentId)
+    return agent ? agent.icon : '🎯'
+  }
+
   if (!isOpen) return null
 
   return (
@@ -80,7 +103,7 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
         background: 'var(--bg-card)',
         borderRadius: 'var(--radius)',
         padding: 24,
-        width: 700,
+        width: 750,
         maxHeight: '80vh',
         overflow: 'hidden',
         border: '1px solid var(--border)',
@@ -102,6 +125,48 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
             fontSize: 20,
             cursor: 'pointer',
           }}>✕</button>
+        </div>
+
+        {/* Agent 筛选器 */}
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          marginBottom: 12,
+          flexWrap: 'wrap',
+        }}>
+          <button
+            onClick={() => setSelectedAgent(null)}
+            style={{
+              padding: '6px 12px',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              background: !selectedAgent ? 'var(--accent)' : 'var(--bg-secondary)',
+              color: !selectedAgent ? 'var(--bg-primary)' : 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontSize: 12,
+              fontWeight: !selectedAgent ? 'bold' : 'normal',
+            }}
+          >
+            全部
+          </button>
+          {AGENTS.map(agent => (
+            <button
+              key={agent.id}
+              onClick={() => setSelectedAgent(agent.id === selectedAgent ? null : agent.id)}
+              style={{
+                padding: '6px 12px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: selectedAgent === agent.id ? 'var(--accent)' : 'var(--bg-secondary)',
+                color: selectedAgent === agent.id ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 12,
+                fontWeight: selectedAgent === agent.id ? 'bold' : 'normal',
+              }}
+            >
+              {agent.icon} {agent.name}
+            </button>
+          ))}
         </div>
 
         {/* 搜索框 */}
@@ -140,7 +205,7 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
             </div>
           ) : results.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-secondary)' }}>
-              {query.trim() ? '没有找到匹配的会话' : '输入关键词搜索历史会话'}
+              {query.trim() || selectedAgent ? '没有找到匹配的会话' : '输入关键词或选择 Agent 搜索历史会话'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -157,11 +222,30 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
                   }}
                 >
                   <div style={{
-                    fontWeight: 500,
-                    color: selectedSession === session.id ? 'var(--bg-primary)' : 'var(--text-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
                     marginBottom: 4,
                   }}>
-                    {session.title}
+                    <span style={{ fontSize: 14 }}>
+                      {getAgentIcon(session.agentId)}
+                    </span>
+                    <span style={{
+                      fontWeight: 500,
+                      color: selectedSession === session.id ? 'var(--bg-primary)' : 'var(--text-primary)',
+                    }}>
+                      {session.title}
+                    </span>
+                    <span style={{
+                      marginLeft: 'auto',
+                      fontSize: 11,
+                      padding: '2px 6px',
+                      background: 'var(--bg-primary)',
+                      borderRadius: 4,
+                      color: 'var(--text-secondary)',
+                    }}>
+                      {getAgentName(session.agentId)}
+                    </span>
                   </div>
                   {session.matchPreview && session.matchPreview !== session.title && (
                     <div style={{
@@ -199,8 +283,22 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
               fontSize: 13,
               color: 'var(--text-secondary)',
               marginBottom: 8,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
             }}>
-              会话预览（{fullSession.userCount} 条用户消息，{fullSession.assistantCount} 条 AI 回复）
+              <span>{getAgentIcon(fullSession.agentId)}</span>
+              <span>
+                会话预览（{fullSession.userCount} 条用户消息，{fullSession.assistantCount} 条 AI 回复）
+              </span>
+              <span style={{
+                padding: '2px 8px',
+                background: 'var(--bg-secondary)',
+                borderRadius: 4,
+                fontSize: 11,
+              }}>
+                {getAgentName(fullSession.agentId)}
+              </span>
             </div>
             <div style={{
               maxHeight: 200,

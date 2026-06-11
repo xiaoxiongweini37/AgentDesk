@@ -215,8 +215,8 @@ function getSessionList(limit = 20) {
   }
 }
 
-// 搜索会话（文件回退）
-function searchSessions(query) {
+// 搜索会话（文件回退），支持按 Agent 筛选
+function searchSessions(query, agentId = null) {
   try {
     const sessionsDir = '/home/jinzhong/.hermes/sessions';
     const files = fs.readdirSync(sessionsDir)
@@ -228,6 +228,10 @@ function searchSessions(query) {
     
     for (const f of files) {
       const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf8'));
+      
+      // Agent 筛选
+      if (agentId && data.agent_id !== agentId) continue;
+      
       const messages = data.messages || [];
       const userMsgs = messages.filter(m => m.role === 'user');
       
@@ -267,6 +271,7 @@ function searchSessions(query) {
           title,
           matchPreview,
           messageCount: messages.length,
+          agentId: data.agent_id || 'commander',
           time: stat.mtime.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         });
       }
@@ -305,10 +310,67 @@ function getFullSession(sessionId) {
       totalMessages: messages.length,
       userCount: messages.filter(m => m.role === 'user').length,
       assistantCount: messages.filter(m => m.role === 'assistant').length,
+      agentId: data.agent_id || 'commander',
     };
   } catch (err) {
     console.error('Error reading full session:', err);
     return null;
+  }
+}
+
+// 获取指定 Agent 的最近会话
+function getAgentSessions(agentId, limit = 10) {
+  try {
+    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.startsWith('session_') && f.endsWith('.json'))
+      .filter(f => !f.includes('api-') && !f.includes('cron_'))
+      .map(f => ({
+        name: f,
+        mtime: fs.statSync(path.join(sessionsDir, f)).mtime
+      }))
+      .sort((a, b) => b.mtime - a.mtime);
+    
+    const results = [];
+    
+    for (const { name: f } of files) {
+      if (results.length >= limit) break;
+      
+      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf8'));
+      
+      // Agent 筛选
+      if (data.agent_id !== agentId) continue;
+      
+      const messages = data.messages || [];
+      const userMsgs = messages.filter(m => m.role === 'user');
+      
+      let title = '未命名会话';
+      for (let i = userMsgs.length - 1; i >= 0; i--) {
+        const content = userMsgs[i].content || '';
+        if (content.length > 5 && !content.startsWith('Review the conversation') && !content.startsWith('[IMPORTANT')) {
+          title = content.substring(0, 40) + (content.length > 40 ? '...' : '');
+          break;
+        }
+      }
+      
+      // 获取最后一条用户消息作为预览
+      const lastUserMsg = userMsgs[userMsgs.length - 1];
+      const preview = lastUserMsg ? (lastUserMsg.content || '').substring(0, 80) : '';
+      
+      results.push({
+        id: data.session_id || f.replace('session_', '').replace('.json', ''),
+        title,
+        preview,
+        messageCount: messages.length,
+        agentId: data.agent_id || 'commander',
+        lastActive: data.last_active || fs.statSync(path.join(sessionsDir, f)).mtime.getTime() / 1000,
+      });
+    }
+    
+    return results;
+  } catch (err) {
+    console.error('Error getting agent sessions:', err);
+    return [];
   }
 }
 
@@ -425,15 +487,16 @@ const server = http.createServer((req, res) => {
   if (req.url.startsWith('/api/sessions/search')) {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const query = url.searchParams.get('q') || '';
+    const agentId = url.searchParams.get('agent') || null;
     
     // 优先用 Python 脚本搜索（读 state.db）
-    const dbResults = searchSessionsFromDb(query);
+    const dbResults = searchSessionsFromDb(query, agentId);
     if (dbResults.length > 0) {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(dbResults));
     } else {
       // 回退到文件搜索
-      const fallbackResults = searchSessions(query);
+      const fallbackResults = searchSessions(query, agentId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(fallbackResults));
     }
@@ -451,6 +514,17 @@ const server = http.createServer((req, res) => {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Session not found' }));
     }
+    return;
+  }
+
+  // Handle agent sessions endpoint
+  if (req.url.match(/^\/api\/agents\/[^/]+\/sessions$/)) {
+    const agentId = req.url.split('/')[3];
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const limit = parseInt(url.searchParams.get('limit') || '10');
+    const sessions = getAgentSessions(agentId, limit);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(sessions));
     return;
   }
 
