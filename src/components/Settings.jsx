@@ -275,6 +275,7 @@ function AgentSettings() {
   const [selectedAgent, setSelectedAgent] = useState(null)
   const [editForm, setEditForm] = useState({})
   const [saving, setSaving] = useState(false)
+  const [showKey, setShowKey] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -305,9 +306,9 @@ function AgentSettings() {
       tmux: agent.tmux || '',
       profile: agent.profile || '',
       capabilities: (agent.capabilities || []).join(', '),
-      api_key: '',
-      base_url: '',
-      model: '',
+      api_key: agent.api_key || '',
+      base_url: agent.base_url || '',
+      model: agent.model || '',
     })
   }
 
@@ -420,16 +421,42 @@ function AgentSettings() {
             />
           </FormField>
 
-          <div style={{
-            marginTop: 16,
-            padding: '12px',
-            background: 'var(--bg-secondary)',
-            borderRadius: 'var(--radius)',
-            fontSize: 12,
-            color: 'var(--text-secondary)',
-          }}>
-            💡 API Key 和 Base URL 需要在 config.yaml 中配置，暂不支持UI修改
-          </div>
+          <FormField label="API Key">
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={editForm.api_key}
+                onChange={e => setEditForm(prev => ({ ...prev, api_key: e.target.value }))}
+                style={{ ...inputStyle, flex: 1 }}
+                placeholder="留空表示使用config.yaml中的配置"
+              />
+              <button onClick={() => setShowKey(!showKey)} style={{
+                ...btnStyle,
+                padding: '8px',
+                fontSize: 12,
+              }}>
+                {showKey ? '🙈' : '👁️'}
+              </button>
+            </div>
+          </FormField>
+
+          <FormField label="Base URL">
+            <input
+              value={editForm.base_url}
+              onChange={e => setEditForm(prev => ({ ...prev, base_url: e.target.value }))}
+              style={inputStyle}
+              placeholder="如: https://token-plan-cn.xiaomimimo.com/v1"
+            />
+          </FormField>
+
+          <FormField label="模型名称">
+            <input
+              value={editForm.model}
+              onChange={e => setEditForm(prev => ({ ...prev, model: e.target.value }))}
+              style={inputStyle}
+              placeholder="如: mimo-v2.5-pro"
+            />
+          </FormField>
 
           <div style={{ marginTop: 16 }}>
             <button onClick={handleSave} disabled={saving} style={{

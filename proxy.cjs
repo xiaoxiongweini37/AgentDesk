@@ -467,6 +467,9 @@ function getAgentList() {
     tmux: config.tmux || null,
     profile: config.profile || null,
     capabilities: config.capabilities || [],
+    api_key: config.api_key || '',
+    base_url: config.base_url || '',
+    model: config.model || '',
   }));
 }
 
@@ -645,6 +648,9 @@ const server = http.createServer((req, res) => {
         if (updates.tmux !== undefined) agent.tmux = updates.tmux || null;
         if (updates.profile !== undefined) agent.profile = updates.profile || null;
         if (updates.capabilities) agent.capabilities = updates.capabilities;
+        if (updates.api_key !== undefined) agent.api_key = updates.api_key || undefined;
+        if (updates.base_url !== undefined) agent.base_url = updates.base_url || undefined;
+        if (updates.model !== undefined) agent.model = updates.model || undefined;
         
         // 写回配置
         fs.writeFileSync(configPath, yaml.stringify(config, { lineWidth: -1 }), 'utf8');
