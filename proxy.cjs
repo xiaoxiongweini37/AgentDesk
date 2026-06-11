@@ -527,6 +527,121 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Handle messages endpoint
+  if (req.url === '/api/messages' && req.method === 'GET') {
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
+      const result = execSync(`python3 ${scriptPath} get commander`, {
+        encoding: 'utf8',
+        timeout: 5000,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(result);
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Handle agent messages endpoint
+  if (req.url.match(/^\/api\/messages\/[^/]+$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[3];
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
+      const result = execSync(`python3 ${scriptPath} get ${agentId}`, {
+        encoding: 'utf8',
+        timeout: 5000,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(result);
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Handle send message endpoint
+  if (req.url === '/api/messages' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const msg = JSON.parse(body);
+        const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
+        const result = execSync(`python3 ${scriptPath} send ${msg.from} ${msg.to} ${msg.type} "${msg.content.replace(/"/g, '\\"')}"`, {
+          encoding: 'utf8',
+          timeout: 5000,
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(result);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Handle tasks endpoint
+  if (req.url === '/api/tasks' && req.method === 'GET') {
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
+      const result = execSync(`python3 ${scriptPath} list`, {
+        encoding: 'utf8',
+        timeout: 5000,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(result);
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Handle create task endpoint
+  if (req.url === '/api/tasks' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const task = JSON.parse(body);
+        const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
+        const assigned = task.assigned_to || '';
+        const priority = task.priority || 'normal';
+        const result = execSync(`python3 ${scriptPath} create "${task.title}" "${task.description || ''}" ${assigned} ${priority}`, {
+          encoding: 'utf8',
+          timeout: 5000,
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(result);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Handle auto-assign tasks endpoint
+  if (req.url === '/api/tasks/auto-assign' && req.method === 'POST') {
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
+      const result = execSync(`python3 ${scriptPath} auto-assign`, {
+        encoding: 'utf8',
+        timeout: 5000,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(result);
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   // Handle agent sessions endpoint
   if (req.url.match(/^\/api\/agents\/[^/]+\/sessions/)) {
     const agentId = req.url.split('/')[3];
