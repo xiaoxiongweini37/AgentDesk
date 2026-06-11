@@ -632,14 +632,7 @@ const server = http.createServer((req, res) => {
     const msgId = parts[4]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
-      // 调用 mark_read 功能
-      const result = execSync(`python3 -c "
-import sys
-sys.path.insert(0, '${process.env.HOME}/.hermes/agent-orchestrator')
-from message_bus import message_bus
-message_bus.mark_read('${agentId}', '${msgId}')
-print('ok')
-"`, { encoding: 'utf8', timeout: 5000 })
+      execSync(`python3 ${scriptPath} mark-read ${agentId} ${msgId}`, { encoding: 'utf8', timeout: 5000 })
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true }))
     } catch (err) {
@@ -658,24 +651,19 @@ print('ok')
       try {
         const update = JSON.parse(body)
         const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py'
-        const result = execSync(`python3 -c "
-import sys
-sys.path.insert(0, '${process.env.HOME}/.hermes/agent-orchestrator')
-from task_manager import task_manager
-task = task_manager.get_task('${taskId}')
-if task:
-    if '${update.status}' == 'assigned':
-        task_manager.assign_task('${taskId}', task.get('assigned_to', 'worker'))
-    elif '${update.status}' == 'in_progress':
-        task_manager.start_task('${taskId}')
-    elif '${update.status}' == 'completed':
-        task_manager.complete_task('${taskId}')
-    elif '${update.status}' == 'failed':
-        task_manager.fail_task('${taskId}')
-    print('ok')
-else:
-    print('not found')
-"`, { encoding: 'utf8', timeout: 5000 })
+        // 先获取任务，再更新状态
+        if (update.status === 'cancelled') {
+          // cancelled 直接标记为 completed（简单处理）
+          execSync(`python3 ${scriptPath} complete ${taskId} "cancelled"`, { encoding: 'utf8', timeout: 5000 })
+        } else if (update.status === 'assigned') {
+          execSync(`python3 ${scriptPath} assign ${taskId} worker`, { encoding: 'utf8', timeout: 5000 })
+        } else if (update.status === 'in_progress') {
+          execSync(`python3 ${scriptPath} start ${taskId}`, { encoding: 'utf8', timeout: 5000 })
+        } else if (update.status === 'completed') {
+          execSync(`python3 ${scriptPath} complete ${taskId}`, { encoding: 'utf8', timeout: 5000 })
+        } else if (update.status === 'failed') {
+          execSync(`python3 ${scriptPath} complete ${taskId} "failed"`, { encoding: 'utf8', timeout: 5000 })
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ success: true }))
       } catch (err) {
