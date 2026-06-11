@@ -5,6 +5,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
   const [input, setInput] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [expandedThinking, setExpandedThinking] = useState({})
   const messagesEndRef = useRef(null)
   const messagesContainerRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -14,14 +15,12 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
   const isSessionInterrupted = () => {
     if (messages.length === 0) return false
     const lastMsg = messages[messages.length - 1]
-    // 最后一条是用户消息（等待回复时中断）
     if (lastMsg.role === 'user') return true
-    // 最后一条是错误消息
     if (lastMsg.role === 'assistant' && lastMsg.content?.startsWith('❌')) return true
     return false
   }
 
-  // 获取最后一条用户消息（用于重新发送）
+  // 获取最后一条用户消息
   const getLastUserMessage = () => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user') return messages[i].content
@@ -29,7 +28,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     return null
   }
 
-  // 恢复会话
   const handleResume = () => {
     const lastUserMsg = getLastUserMessage()
     if (lastUserMsg && !isLoading) {
@@ -37,52 +35,119 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     }
   }
 
-  // 过滤系统消息
-  const filteredMessages = messages.filter(msg => {
-    const content = msg.content || ''
-    // 过滤 Skill Curator 和其他系统消息
-    if (content.startsWith('Review the conversation above')) return false
-    if (content.startsWith('[IMPORTANT:')) return false
-    if (content.includes('skill library')) return false
-    if (content.includes('DELIVERY:')) return false
-    if (content.includes('SILENT:')) return false
-    return true
-  }).map(msg => {
-    // 处理包含图片描述的用户消息
-    if (msg.role === 'user' && msg.content && msg.content.startsWith('[The user attached an image')) {
-      const content = msg.content
-      // 提取图片描述和实际用户输入
-      const match = content.match(/\[The user attached an image\.\s*Here's what it contains:\s*([\s\S]*?)\]\s*([\s\S]*)/)
-      if (match) {
-        const imageDescription = match[1].trim()
-        const userInput = match[2].trim()
-        // 如果有实际用户输入，只显示用户输入，图片描述作为附件
-        if (userInput) {
-          return {
-            ...msg,
-            content: userInput,
-            hasImage: true,
-            imageDescription: imageDescription,
+  // 处理消息：合并assistant的思考过程为可折叠
+  const processMessages = (msgs) => {
+    const result = []
+    let i = 0
+    
+    while (i < msgs.length) {
+      const msg = msgs[i]
+      const content = msg.content || ''
+      
+      // 过滤系统消息
+      if (content.startsWith('Review the conversation above')) { i++; continue }
+      if (content.startsWith('[IMPORTANT:')) { i++; continue }
+      if (content.includes('skill library')) { i++; continue }
+      if (content.includes('DELIVERY:')) { i++; continue }
+      if (content.includes('SILENT:')) { i++; continue }
+      
+      // 处理用户消息
+      if (msg.role === 'user') {
+        let processedContent = content
+        let hasImage = false
+        let imageDescription = ''
+        
+        // 处理图片消息
+        if (content.startsWith('[The user attached an image')) {
+          const match = content.match(/\[The user attached an image\.\s*Here's what it contains:\s*([\s\S]*?)\]\s*([\s\S]*)/)
+          if (match) {
+            imageDescription = match[1].trim()
+            processedContent = match[2].trim() || '📷 发送了一张图片'
+            hasImage = true
           }
         }
-        // 如果只有图片描述，显示为图片消息
-        return {
+        
+        result.push({
           ...msg,
-          content: '📷 发送了一张图片',
-          hasImage: true,
-          imageDescription: imageDescription,
-        }
+          content: processedContent,
+          hasImage,
+          imageDescription,
+        })
+        i++
+        continue
       }
+      
+      // 处理assistant消息：收集连续的assistant消息，最后一个作为主回复，前面的作为思考过程
+      if (msg.role === 'assistant') {
+        const thinkingMessages = []
+        let finalMessage = null
+        
+        // 收集连续的assistant消息
+        while (i < msgs.length && msgs[i].role === 'assistant') {
+          const currentContent = msgs[i].content || ''
+          
+          // 跳过空消息
+          if (!currentContent.trim()) {
+            i++
+            continue
+          }
+          
+          // 检查是否是最后一条有实质内容的消息
+          const isLastInGroup = (i + 1 >= msgs.length || msgs[i + 1].role !== 'assistant')
+          
+          if (isLastInGroup) {
+            finalMessage = msgs[i]
+          } else {
+            thinkingMessages.push(msgs[i])
+          }
+          i++
+        }
+        
+        // 如果有思考过程，创建可折叠结构
+        if (thinkingMessages.length > 0 && finalMessage) {
+          const thinkingId = `thinking_${result.length}`
+          result.push({
+            ...finalMessage,
+            thinkingId,
+            thinkingContent: thinkingMessages.map(m => m.content).join('\n'),
+            hasThinking: true,
+          })
+        } else if (finalMessage) {
+          result.push(finalMessage)
+        }
+        continue
+      }
+      
+      // tool消息：作为思考过程的一部分
+      if (msg.role === 'tool') {
+        // 跳过tool消息，它们通常包含在assistant的思考中
+        i++
+        continue
+      }
+      
+      result.push(msg)
+      i++
     }
-    return msg
-  })
+    
+    return result
+  }
 
-  // 自动滚动到底部（只在用户没手动滚动时）
+  const processedMessages = processMessages(messages)
+
+  // 切换思考过程显示
+  const toggleThinking = (thinkingId) => {
+    setExpandedThinking(prev => ({
+      ...prev,
+      [thinkingId]: !prev[thinkingId],
+    }))
+  }
+
+  // 自动滚动到底部
   useEffect(() => {
     if (autoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-    if (lastMessageRef.current && filteredMessages.length > 0) {
+    if (lastMessageRef.current && processedMessages.length > 0) {
       gsap.fromTo(lastMessageRef.current, 
         { y: 20, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.3, ease: 'power2.out' }
@@ -90,22 +155,18 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     }
   }, [messages, streamingText, autoScroll])
 
-  // 检测用户滚动
   const handleScroll = () => {
     const container = messagesContainerRef.current
     if (!container) return
-    
     const atBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50
     setAutoScroll(atBottom)
     setShowScrollTop(container.scrollTop > 200)
   }
 
-  // 回到顶部
   const scrollToTop = () => {
     messagesContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // 回到底部
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     setAutoScroll(true)
@@ -187,7 +248,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               position: 'relative',
             }}
           >
-            {filteredMessages.length === 0 && !streamingText && (
+            {processedMessages.length === 0 && !streamingText && (
               <div style={{
                 textAlign: 'center',
                 color: 'var(--text-secondary)',
@@ -200,15 +261,67 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               </div>
             )}
 
-            {filteredMessages.map((msg, i) => (
+            {processedMessages.map((msg, i) => (
               <div
                 key={i}
-                ref={i === filteredMessages.length - 1 ? lastMessageRef : null}
+                ref={i === processedMessages.length - 1 ? lastMessageRef : null}
                 style={{
                   display: 'flex',
-                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  flexDirection: 'column',
+                  alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
                 }}
               >
+                {/* 思考过程折叠按钮 */}
+                {msg.hasThinking && (
+                  <button
+                    onClick={() => toggleThinking(msg.thinkingId)}
+                    style={{
+                      marginBottom: 4,
+                      padding: '2px 8px',
+                      background: 'var(--bg-secondary)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      color: 'var(--text-secondary)',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <span style={{ 
+                      transform: expandedThinking[msg.thinkingId] ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.2s',
+                      display: 'inline-block',
+                    }}>
+                      ▶
+                    </span>
+                    思考过程 ({msg.thinkingContent.split('\n').length} 行)
+                  </button>
+                )}
+                
+                {/* 思考过程内容 */}
+                {msg.hasThinking && expandedThinking[msg.thinkingId] && (
+                  <div style={{
+                    marginBottom: 8,
+                    padding: '8px 12px',
+                    background: 'var(--bg-secondary)',
+                    borderRadius: 'var(--radius)',
+                    border: '1px solid var(--border)',
+                    maxWidth: '90%',
+                    fontSize: 11,
+                    color: 'var(--text-secondary)',
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-all',
+                    lineHeight: 1.5,
+                    maxHeight: 200,
+                    overflowY: 'auto',
+                  }}>
+                    {msg.thinkingContent}
+                  </div>
+                )}
+                
+                {/* 主消息 */}
                 <div style={{
                   maxWidth: '70%',
                   padding: '12px 16px',
