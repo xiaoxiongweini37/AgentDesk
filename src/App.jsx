@@ -7,6 +7,9 @@ import Dashboard from './components/Dashboard'
 import Settings from './components/Settings'
 import ContextPanel from './components/ContextPanel'
 import SessionSearch from './components/SessionSearch'
+import MessagePanel from './components/MessagePanel'
+import TaskPanel from './components/TaskPanel'
+import CollaborationFlow from './components/CollaborationFlow'
 import { useHermes } from './hooks/useHermes'
 import { useSessions } from './hooks/useSessions'
 
@@ -15,6 +18,9 @@ function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [showContextPanel, setShowContextPanel] = useState(true)
   const [showSessionSearch, setShowSessionSearch] = useState(false)
+  const [showMessagePanel, setShowMessagePanel] = useState(false)
+  const [showTaskPanel, setShowTaskPanel] = useState(false)
+  const [showCollaborationFlow, setShowCollaborationFlow] = useState(false)
   const { sendMessageStream, isLoading, error, streamingText } = useHermes()
 
   const {
@@ -125,6 +131,9 @@ function App() {
         onRefreshSessions={refreshSessions}
         onToggleContext={() => setShowContextPanel(v => !v)}
         onOpenSessionSearch={() => setShowSessionSearch(true)}
+        onOpenMessages={() => setShowMessagePanel(true)}
+        onOpenTasks={() => setShowTaskPanel(true)}
+        onOpenCollaboration={() => setShowCollaborationFlow(true)}
       />
 
       {/* 中间 - 对话区域 */}
@@ -167,6 +176,24 @@ function App() {
         isOpen={showSessionSearch}
         onClose={() => setShowSessionSearch(false)}
         onLoadSession={handleLoadSession}
+      />
+
+      {/* 消息中心弹窗 */}
+      <MessagePanel
+        isOpen={showMessagePanel}
+        onClose={() => setShowMessagePanel(false)}
+      />
+
+      {/* 任务管理弹窗 */}
+      <TaskPanel
+        isOpen={showTaskPanel}
+        onClose={() => setShowTaskPanel(false)}
+      />
+
+      {/* 协作流程弹窗 */}
+      <CollaborationFlow
+        isOpen={showCollaborationFlow}
+        onClose={() => setShowCollaborationFlow(false)}
       />
     </div>
   )

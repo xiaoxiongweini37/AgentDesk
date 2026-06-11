@@ -53,6 +53,9 @@ export default function Sidebar({
   onRefreshSessions,
   onToggleContext,
   onOpenSessionSearch,
+  onOpenMessages,
+  onOpenTasks,
+  onOpenCollaboration,
 }) {
   const [expanded, setExpanded] = useState(false)
   const [search, setSearch] = useState('')
@@ -427,7 +430,80 @@ export default function Sidebar({
       </div>
 
       {/* 设置按钮 */}
-      <div style={{ padding: '4px 8px 12px', display: 'flex', justifyContent: expanded ? 'stretch' : 'center' }}>
+      <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 4, alignItems: expanded ? 'stretch' : 'center' }}>
+        {/* 协作按钮 */}
+        <button
+          title="协作流程"
+          onClick={() => onOpenCollaboration?.()}
+          style={{
+            width: expanded ? '100%' : 44,
+            height: 36,
+            border: 'none',
+            borderRadius: 'var(--radius)',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontSize: expanded ? 13 : 16,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: expanded ? 'flex-start' : 'center',
+            gap: expanded ? 8 : 0,
+            padding: expanded ? '0 12px' : 0,
+          }}
+        >
+          <span style={{ fontSize: expanded ? 14 : 16 }}>🔄</span>
+          {expanded && '协作流程'}
+        </button>
+        
+        {/* 消息按钮 */}
+        <button
+          title="消息中心"
+          onClick={() => onOpenMessages?.()}
+          style={{
+            width: expanded ? '100%' : 44,
+            height: 36,
+            border: 'none',
+            borderRadius: 'var(--radius)',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontSize: expanded ? 13 : 16,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: expanded ? 'flex-start' : 'center',
+            gap: expanded ? 8 : 0,
+            padding: expanded ? '0 12px' : 0,
+          }}
+        >
+          <span style={{ fontSize: expanded ? 14 : 16 }}>💬</span>
+          {expanded && '消息中心'}
+        </button>
+        
+        {/* 任务按钮 */}
+        <button
+          title="任务管理"
+          onClick={() => onOpenTasks?.()}
+          style={{
+            width: expanded ? '100%' : 44,
+            height: 36,
+            border: 'none',
+            borderRadius: 'var(--radius)',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontSize: expanded ? 13 : 16,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: expanded ? 'flex-start' : 'center',
+            gap: expanded ? 8 : 0,
+            padding: expanded ? '0 12px' : 0,
+          }}
+        >
+          <span style={{ fontSize: expanded ? 14 : 16 }}>📋</span>
+          {expanded && '任务管理'}
+        </button>
+        
+        {/* 设置按钮 */}
         <button
           title="设置"
           onClick={() => onSettings?.()}
