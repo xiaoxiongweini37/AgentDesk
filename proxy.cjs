@@ -487,6 +487,84 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ status: 'ok', platform: 'hermes-agent' }));
     return;
   }
+  // Handle mounts endpoint
+  if (req.url.match(/^\/api\/mounts/) && req.method === 'GET') {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const sessionId = url.searchParams.get('session') || 'default';
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
+      const result = execSync(`python3 ${scriptPath} list ${sessionId}`, {
+        encoding: 'utf8', timeout: 5000,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(result);
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('[]');
+    }
+    return;
+  }
+
+  // Handle add mount endpoint
+  if (req.url === '/api/mounts' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { session_id, path } = JSON.parse(body);
+        const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
+        const result = execSync(`python3 ${scriptPath} add ${session_id} "${path}"`, {
+          encoding: 'utf8', timeout: 5000,
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(result);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Handle get mount context
+  if (req.url.match(/^\/api\/mounts\/context/) && req.method === 'GET') {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const sessionId = url.searchParams.get('session') || 'default';
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
+      const result = execSync(`python3 ${scriptPath} context ${sessionId}`, {
+        encoding: 'utf8', timeout: 10000,
+      });
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(result);
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('');
+    }
+    return;
+  }
+
+  // Handle remove mount endpoint
+  if (req.url === '/api/mounts' && req.method === 'DELETE') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { session_id, mount_id } = JSON.parse(body);
+        const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
+        const result = execSync(`python3 ${scriptPath} remove ${session_id} ${mount_id}`, {
+          encoding: 'utf8', timeout: 5000,
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(result);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Handle agents list endpoint
   if (req.url === '/api/agents' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -21,6 +21,26 @@ export function useHermes() {
       .catch(err => console.error('获取 session ID 失败:', err))
   }, [])
 
+  // 获取挂载文件上下文
+  const getMountContext = useCallback(async () => {
+    if (!sessionId) return ''
+    try {
+      const res = await fetch(`${API_BASE}/api/mounts?session=${sessionId}`)
+      if (!res.ok) return ''
+      const mounts = await res.json()
+      if (mounts.length === 0) return ''
+      
+      // 获取挂载内容
+      const contextRes = await fetch(`${API_BASE}/api/mounts/context?session=${sessionId}`)
+      if (contextRes.ok) {
+        return await contextRes.text()
+      }
+    } catch (err) {
+      console.error('Failed to get mount context:', err)
+    }
+    return ''
+  }, [sessionId])
+
   // 流式发送消息
   const sendMessageStream = useCallback(async (messages, onChunk) => {
     setIsLoading(true)
@@ -28,6 +48,30 @@ export function useHermes() {
     setStreamingText('')
 
     try {
+      // 获取挂载上下文
+      const mountContext = await getMountContext()
+      
+      // 如果有挂载上下文，添加到系统消息
+      let enhancedMessages = [...messages]
+      if (mountContext) {
+        // 检查是否已有系统消息
+        const hasSystem = enhancedMessages.some(m => m.role === 'system')
+        if (!hasSystem) {
+          enhancedMessages.unshift({
+            role: 'system',
+            content: mountContext,
+          })
+        } else {
+          // 追加到现有系统消息
+          enhancedMessages = enhancedMessages.map(m => {
+            if (m.role === 'system') {
+              return { ...m, content: m.content + '\n\n' + mountContext }
+            }
+            return m
+          })
+        }
+      }
+
       const headers = {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer hermes-secret-key-2026',
@@ -42,7 +86,7 @@ export function useHermes() {
         headers,
         body: JSON.stringify({
           model: 'mimo-v2.5-pro',
-          messages: messages,
+          messages: enhancedMessages,
           stream: true,
         }),
       })
@@ -90,7 +134,7 @@ export function useHermes() {
       setIsLoading(false)
       setStreamingText('')
     }
-  }, [sessionId])
+  }, [sessionId, getMountContext])
 
   // 非流式发送消息（备用）
   const sendMessage = useCallback(async (messages) => {
@@ -98,6 +142,28 @@ export function useHermes() {
     setError(null)
 
     try {
+      // 获取挂载上下文
+      const mountContext = await getMountContext()
+      
+      // 如果有挂载上下文，添加到系统消息
+      let enhancedMessages = [...messages]
+      if (mountContext) {
+        const hasSystem = enhancedMessages.some(m => m.role === 'system')
+        if (!hasSystem) {
+          enhancedMessages.unshift({
+            role: 'system',
+            content: mountContext,
+          })
+        } else {
+          enhancedMessages = enhancedMessages.map(m => {
+            if (m.role === 'system') {
+              return { ...m, content: m.content + '\n\n' + mountContext }
+            }
+            return m
+          })
+        }
+      }
+
       const headers = {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer hermes-secret-key-2026',
@@ -112,7 +178,7 @@ export function useHermes() {
         headers,
         body: JSON.stringify({
           model: 'mimo-v2.5-pro',
-          messages: messages,
+          messages: enhancedMessages,
         }),
       })
 
@@ -128,7 +194,7 @@ export function useHermes() {
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId])
+  }, [sessionId, getMountContext])
 
   const checkHealth = useCallback(async () => {
     try {

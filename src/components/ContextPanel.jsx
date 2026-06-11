@@ -5,21 +5,31 @@ const API_BASE = 'http://localhost:3001'
 export default function ContextPanel({ sessionId, onClose }) {
   const [activeSection, setActiveSection] = useState('context')
   const [contextData, setContextData] = useState(null)
+  const [mounts, setMounts] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showMountModal, setShowMountModal] = useState(false)
+  const [mountPath, setMountPath] = useState('')
 
-  // 获取上下文数据
+  // 获取上下文数据和挂载
   useEffect(() => {
     if (!sessionId) return
     
-    const fetchContext = async () => {
+    const fetchData = async () => {
       setLoading(true)
       try {
         // 获取会话消息
-        const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages`)
-        if (res.ok) {
-          const messages = await res.json()
+        const msgRes = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages`)
+        if (msgRes.ok) {
+          const messages = await msgRes.json()
           const data = analyzeContext(messages)
           setContextData(data)
+        }
+        
+        // 获取挂载列表
+        const mountRes = await fetch(`${API_BASE}/api/mounts?session=${sessionId}`)
+        if (mountRes.ok) {
+          const mountData = await mountRes.json()
+          setMounts(mountData)
         }
       } catch (err) {
         console.error('Failed to fetch context:', err)
@@ -27,14 +37,13 @@ export default function ContextPanel({ sessionId, onClose }) {
       setLoading(false)
     }
     
-    fetchContext()
+    fetchData()
   }, [sessionId])
 
   // 分析上下文
   const analyzeContext = (messages) => {
     const files = new Set()
     const tools = new Set()
-    let toolCalls = []
     let currentDir = '/home/jinzhong'
     let totalTokens = 0
     
@@ -53,13 +62,7 @@ export default function ContextPanel({ sessionId, onClose }) {
         tools.add(toolMatch[1])
       }
       
-      // 提取工作目录
-      const dirMatch = content.match(/(?:cd|chdir)\s+([^\s]+)/)
-      if (dirMatch) {
-        currentDir = dirMatch[1]
-      }
-      
-      // 估算token（粗略）
+      // 估算token
       totalTokens += Math.ceil(content.length / 4)
     })
     
@@ -71,6 +74,46 @@ export default function ContextPanel({ sessionId, onClose }) {
       messageCount: messages.length,
       userMessages: messages.filter(m => m.role === 'user').length,
       assistantMessages: messages.filter(m => m.role === 'assistant').length,
+    }
+  }
+
+  // 添加挂载
+  const handleAddMount = async () => {
+    if (!mountPath.trim()) return
+    
+    try {
+      const res = await fetch(`${API_BASE}/api/mounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, path: mountPath }),
+      })
+      
+      if (res.ok) {
+        const result = await res.json()
+        if (result.error) {
+          alert(result.error)
+        } else {
+          setMounts(prev => [...prev, result.mount])
+          setMountPath('')
+          setShowMountModal(false)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to add mount:', err)
+    }
+  }
+
+  // 移除挂载
+  const handleRemoveMount = async (mountId) => {
+    try {
+      await fetch(`${API_BASE}/api/mounts`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, mount_id: mountId }),
+      })
+      setMounts(prev => prev.filter(m => m.id !== mountId))
+    } catch (err) {
+      console.error('Failed to remove mount:', err)
     }
   }
 
@@ -151,22 +194,193 @@ export default function ContextPanel({ sessionId, onClose }) {
             加载中...
           </div>
         ) : activeSection === 'context' ? (
-          <ContextContent data={contextData} />
+          <ContextContent 
+            data={contextData} 
+            mounts={mounts}
+            onAddMount={() => setShowMountModal(true)}
+            onRemoveMount={handleRemoveMount}
+          />
         ) : (
           <ProgressContent data={contextData} />
         )}
       </div>
+
+      {/* 挂载模态框 */}
+      {showMountModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1100,
+        }} onClick={() => setShowMountModal(false)}>
+          <div style={{
+            background: 'var(--bg-card)',
+            borderRadius: 'var(--radius)',
+            padding: 20,
+            width: 400,
+            border: '1px solid var(--border)',
+          }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 16px', color: 'var(--text-primary)' }}>
+              📁 挂载文件/文件夹
+            </h3>
+            
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
+                路径（支持绝对路径或~开头）
+              </label>
+              <input
+                value={mountPath}
+                onChange={e => setMountPath(e.target.value)}
+                placeholder="/path/to/file 或 ~/projects/myapp"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
+                  background: 'var(--bg-secondary)',
+                  color: 'var(--text-primary)',
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                }}
+                autoFocus
+              />
+            </div>
+            
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              💡 挂载后，AI对话时会自动读取文件内容作为上下文
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button onClick={() => setShowMountModal(false)} style={{
+                padding: '8px 16px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: 'transparent',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+              }}>
+                取消
+              </button>
+              <button onClick={handleAddMount} style={{
+                padding: '8px 16px',
+                border: 'none',
+                borderRadius: 'var(--radius)',
+                background: 'var(--accent)',
+                color: 'var(--bg-primary)',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+              }}>
+                挂载
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-function ContextContent({ data }) {
+function ContextContent({ data, mounts, onAddMount, onRemoveMount }) {
   if (!data) return <div style={{ color: 'var(--text-secondary)' }}>无数据</div>
   
   return (
     <div>
+      {/* 挂载文件 */}
+      <Section title="挂载文件" icon="📁">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          {mounts.map((mount) => (
+            <div key={mount.id} style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 10px',
+              background: 'var(--bg-card)',
+              borderRadius: 'var(--radius)',
+              border: '1px solid var(--border)',
+            }}>
+              <span style={{ fontSize: 14 }}>
+                {mount.type === 'directory' ? '📂' : '📄'}
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: 12,
+                  color: 'var(--text-primary)',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {mount.name}
+                </div>
+                <div style={{
+                  fontSize: 10,
+                  color: 'var(--text-secondary)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}>
+                  {mount.path}
+                </div>
+              </div>
+              <button
+                onClick={() => onRemoveMount(mount.id)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  padding: '2px 4px',
+                }}
+                title="移除挂载"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+        
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={onAddMount} style={{
+            flex: 1,
+            padding: '8px',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+          }}>
+            📁 挂载文件夹
+          </button>
+          <button onClick={onAddMount} style={{
+            flex: 1,
+            padding: '8px',
+            background: 'transparent',
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius)',
+            color: 'var(--text-secondary)',
+            cursor: 'pointer',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+          }}>
+            📄 挂载文件
+          </button>
+        </div>
+      </Section>
+
       {/* 关联文件 */}
-      <Section title="关联文件" icon="📎">
+      <Section title="关联文件" icon="📎" style={{ marginTop: 20 }}>
         {data.files.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {data.files.map((file, i) => (
