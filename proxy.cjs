@@ -334,6 +334,34 @@ function getAgentSessions(agentId, limit = 10) {
   }
 }
 
+// 获取Agent消息
+function getAgentMessages(agentId) {
+  try {
+    const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
+    const result = execSync(`python3 ${scriptPath} get ${agentId}`, {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    return JSON.parse(result);
+  } catch (err) {
+    return [];
+  }
+}
+
+// 获取Agent任务
+function getAgentTasks(agentId) {
+  try {
+    const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
+    const result = execSync(`python3 ${scriptPath} list null ${agentId}`, {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    return JSON.parse(result);
+  } catch (err) {
+    return [];
+  }
+}
+
 // Dashboard data endpoint - 从会话文件读取结构化数据
 function getDashboardData() {
   const currentSessionId = getCurrentSessionId();
@@ -346,20 +374,26 @@ function getDashboardData() {
     { id: 'claude-code', name: 'Claude', role: 'Claude Code CLI', tmux: 'claude-code' },
   ];
   
-  return agents.map(agent => {
-    if (agent.sessionId) {
-      const messages = getMessagesFromSession(agent.sessionId, 100);
-      const lastMsg = messages[messages.length - 1];
-      const task = lastMsg ? (lastMsg.role === 'user' ? '等待回复...' : '工作中') : '空闲';
+    return agents.map(agent => {
+      // 获取消息和任务
+      const agentMsgs = agent.profile ? getAgentMessages(agent.id) : [];
+      const agentTasks = agent.profile ? getAgentTasks(agent.id) : [];
       
-      return {
-        ...agent,
-        online: true,
-        task,
-        messages,
-        output: null,
-      };
-    }
+      if (agent.sessionId) {
+        const sessionMessages = getMessagesFromSession(agent.sessionId, 100);
+        const lastMsg = sessionMessages[sessionMessages.length - 1];
+        const task = lastMsg ? (lastMsg.role === 'user' ? '等待回复...' : '工作中') : '空闲';
+        
+        return {
+          ...agent,
+          online: true,
+          task,
+          messages: sessionMessages,
+          agentMessages: agentMsgs,
+          agentTasks: agentTasks,
+          output: null,
+        };
+      }
     
     if (agent.profile) {
       const online = isSessionActive(agent.tmux);
@@ -369,19 +403,23 @@ function getDashboardData() {
           online: false,
           task: '离线',
           messages: [],
+          agentMessages: agentMsgs,
+          agentTasks: agentTasks,
           output: '离线',
         };
       }
       
-      const messages = getMessagesFromProfile(agent.profile, 100);
-      const lastMsg = messages[messages.length - 1];
+      const profileMessages = getMessagesFromProfile(agent.profile, 100);
+      const lastMsg = profileMessages[profileMessages.length - 1];
       const task = lastMsg ? (lastMsg.role === 'user' ? '等待回复...' : '工作中') : '空闲';
       
       return {
         ...agent,
         online: true,
         task,
-        messages,
+        messages: profileMessages,
+        agentMessages: agentMsgs,
+        agentTasks: agentTasks,
         output: null,
       };
     }
