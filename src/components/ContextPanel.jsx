@@ -199,6 +199,8 @@ export default function ContextPanel({ sessionId, onClose }) {
             mounts={mounts}
             onAddMount={() => setShowMountModal(true)}
             onRemoveMount={handleRemoveMount}
+            onBrowseFile={() => { setBrowseMode('file'); setShowFileBrowser(true) }}
+            onBrowseFolder={() => { setBrowseMode('directory'); setShowFileBrowser(true) }}
           />
         ) : (
           <ProgressContent data={contextData} />
@@ -216,7 +218,7 @@ export default function ContextPanel({ sessionId, onClose }) {
   )
 }
 
-function ContextContent({ data, mounts, onAddMount, onRemoveMount }) {
+function ContextContent({ data, mounts, onAddMount, onRemoveMount, onBrowseFile, onBrowseFolder }) {
   if (!data) return <div style={{ color: 'var(--text-secondary)' }}>无数据</div>
   
   return (
@@ -277,10 +279,7 @@ function ContextContent({ data, mounts, onAddMount, onRemoveMount }) {
         </div>
         
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => {
-            setBrowseMode('directory')
-            setShowFileBrowser(true)
-          }} style={{
+          <button onClick={onBrowseFolder} style={{
             flex: 1,
             padding: '8px',
             background: 'transparent',
@@ -296,10 +295,7 @@ function ContextContent({ data, mounts, onAddMount, onRemoveMount }) {
           }}>
             📁 挂载文件夹
           </button>
-          <button onClick={() => {
-            setBrowseMode('file')
-            setShowFileBrowser(true)
-          }} style={{
+          <button onClick={onBrowseFile} style={{
             flex: 1,
             padding: '8px',
             background: 'transparent',
