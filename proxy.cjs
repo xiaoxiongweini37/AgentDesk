@@ -531,7 +531,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/messages' && req.method === 'GET') {
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
-      const result = execSync(`python3 ${scriptPath} get commander`, {
+      const result = execSync(`python3 ${scriptPath} all`, {
         encoding: 'utf8',
         timeout: 5000,
       });
@@ -570,9 +570,10 @@ const server = http.createServer((req, res) => {
       try {
         const msg = JSON.parse(body);
         const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
-        const result = execSync(`python3 ${scriptPath} send ${msg.from} ${msg.to} ${msg.type} "${msg.content.replace(/"/g, '\\"')}"`, {
+        const escapedContent = msg.content.replace(/"/g, '\\"');
+        const result = execSync(`python3 ${scriptPath} send ${msg.from} ${msg.to} ${msg.type} "${escapedContent}"`, {
           encoding: 'utf8',
-          timeout: 5000,
+          timeout: 10000,
         });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(result);
