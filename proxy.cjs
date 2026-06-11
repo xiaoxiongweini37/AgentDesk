@@ -626,6 +626,59 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Handle queue summary endpoint
+  if (req.url.match(/^\/api\/messages\/queue\/[^/]+$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[4]
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
+      const result = execSync(`python3 ${scriptPath} summary ${agentId}`, {
+        encoding: 'utf8', timeout: 5000,
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(result)
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ agent: agentId, total: 0, high: 0, normal: 0, low: 0, next: null }))
+    }
+    return
+  }
+
+  // Handle get next from queue
+  if (req.url.match(/^\/api\/messages\/queue\/[^/]+\/next$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[4]
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
+      const result = execSync(`python3 ${scriptPath} next ${agentId}`, {
+        encoding: 'utf8', timeout: 5000,
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(result)
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end('null')
+    }
+    return
+  }
+
+  // Handle mark message as processed
+  if (req.url.match(/^\/api\/messages\/queue\/[^/]+\/[^/]+\/process$/) && req.method === 'POST') {
+    const parts = req.url.split('/')
+    const agentId = parts[4]
+    const msgId = parts[5]
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
+      execSync(`python3 ${scriptPath} process ${agentId} ${msgId}`, {
+        encoding: 'utf8', timeout: 5000,
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true }))
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err.message }))
+    }
+    return
+  }
+
   // Handle mark message as read
   if (req.url.match(/^\/api\/messages\/[^/]+\/[^/]+\/read$/) && req.method === 'POST') {
     const parts = req.url.split('/')
