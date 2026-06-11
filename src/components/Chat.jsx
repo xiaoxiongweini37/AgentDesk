@@ -1,6 +1,146 @@
 import { useState, useRef, useEffect } from 'react'
 import { gsap } from '../utils/animations'
 
+// 简单的Markdown渲染
+function renderMarkdown(text) {
+  if (!text) return null
+  
+  const lines = text.split('\n')
+  const elements = []
+  let inList = false
+  let listItems = []
+  
+  const flushList = () => {
+    if (listItems.length > 0) {
+      elements.push(
+        <ul key={`list-${elements.length}`} style={{ margin: '4px 0', paddingLeft: 20 }}>
+          {listItems.map((item, i) => (
+            <li key={i} style={{ marginBottom: 2, lineHeight: 1.6 }}>{item}</li>
+          ))}
+        </ul>
+      )
+      listItems = []
+    }
+    inList = false
+  }
+  
+  lines.forEach((line, i) => {
+    // 标题
+    if (line.startsWith('### ')) {
+      flushList()
+      elements.push(<h4 key={i} style={{ margin: '12px 0 6px', fontSize: 14, fontWeight: 'bold' }}>{line.slice(4)}</h4>)
+      return
+    }
+    if (line.startsWith('## ')) {
+      flushList()
+      elements.push(<h3 key={i} style={{ margin: '14px 0 8px', fontSize: 16, fontWeight: 'bold' }}>{line.slice(3)}</h3>)
+      return
+    }
+    if (line.startsWith('# ')) {
+      flushList()
+      elements.push(<h2 key={i} style={{ margin: '16px 0 10px', fontSize: 18, fontWeight: 'bold' }}>{line.slice(2)}</h2>)
+      return
+    }
+    
+    // 列表项
+    if (line.match(/^\s*[-*]\s/)) {
+      inList = true
+      const content = line.replace(/^\s*[-*]\s/, '')
+      listItems.push(renderInline(content))
+      return
+    }
+    
+    // 代码块
+    if (line.startsWith('```')) {
+      flushList()
+      // 简单处理，跳过语言标记
+      return
+    }
+    
+    // 空行
+    if (!line.trim()) {
+      flushList()
+      elements.push(<div key={i} style={{ height: 8 }} />)
+      return
+    }
+    
+    // 普通段落
+    flushList()
+    elements.push(<p key={i} style={{ margin: '4px 0', lineHeight: 1.7 }}>{renderInline(line)}</p>)
+  })
+  
+  flushList()
+  return elements
+}
+
+// 渲染行内元素（粗体、斜体、代码）
+function renderInline(text) {
+  if (!text) return text
+  
+  // 简单处理：粗体、代码
+  const parts = []
+  let remaining = text
+  let key = 0
+  
+  while (remaining) {
+    // 匹配 **粗体**
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/)
+    // 匹配 `代码`
+    const codeMatch = remaining.match(/`(.+?)`/)
+    // 匹配 *斜体*
+    const italicMatch = remaining.match(/\*(.+?)\*/)
+    
+    let firstMatch = null
+    let matchType = null
+    
+    if (boldMatch && (!firstMatch || boldMatch.index < firstMatch.index)) {
+      firstMatch = boldMatch
+      matchType = 'bold'
+    }
+    if (codeMatch && (!firstMatch || codeMatch.index < firstMatch.index)) {
+      firstMatch = codeMatch
+      matchType = 'code'
+    }
+    if (italicMatch && (!firstMatch || italicMatch.index < firstMatch.index)) {
+      firstMatch = italicMatch
+      matchType = 'italic'
+    }
+    
+    if (!firstMatch) {
+      parts.push(remaining)
+      break
+    }
+    
+    // 匹配前的文本
+    if (firstMatch.index > 0) {
+      parts.push(remaining.slice(0, firstMatch.index))
+    }
+    
+    // 匹配的文本
+    if (matchType === 'bold') {
+      parts.push(<strong key={key++} style={{ fontWeight: 600 }}>{firstMatch[1]}</strong>)
+    } else if (matchType === 'code') {
+      parts.push(
+        <code key={key++} style={{ 
+          background: 'rgba(255,255,255,0.1)', 
+          padding: '1px 4px', 
+          borderRadius: 3, 
+          fontSize: '0.9em',
+          fontFamily: 'monospace' 
+        }}>
+          {firstMatch[1]}
+        </code>
+      )
+    } else if (matchType === 'italic') {
+      parts.push(<em key={key++}>{firstMatch[1]}</em>)
+    }
+    
+    remaining = remaining.slice(firstMatch.index + firstMatch[0].length)
+  }
+  
+  return parts
+}
+
 export default function Chat({ messages, onSend, onFileUpload, isLoading, streamingText, showContextPanel, onToggleContext }) {
   const [input, setInput] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
@@ -11,7 +151,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
   const fileInputRef = useRef(null)
   const lastMessageRef = useRef(null)
 
-  // 检测会话是否中断
   const isSessionInterrupted = () => {
     if (messages.length === 0) return false
     const lastMsg = messages[messages.length - 1]
@@ -20,7 +159,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     return false
   }
 
-  // 获取最后一条用户消息
   const getLastUserMessage = () => {
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === 'user') return messages[i].content
@@ -35,7 +173,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     }
   }
 
-  // 处理消息：合并assistant的思考过程为可折叠
   const processMessages = (msgs) => {
     const result = []
     let i = 0
@@ -44,20 +181,17 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
       const msg = msgs[i]
       const content = msg.content || ''
       
-      // 过滤系统消息
       if (content.startsWith('Review the conversation above')) { i++; continue }
       if (content.startsWith('[IMPORTANT:')) { i++; continue }
       if (content.includes('skill library')) { i++; continue }
       if (content.includes('DELIVERY:')) { i++; continue }
       if (content.includes('SILENT:')) { i++; continue }
       
-      // 处理用户消息
       if (msg.role === 'user') {
         let processedContent = content
         let hasImage = false
         let imageDescription = ''
         
-        // 处理图片消息
         if (content.startsWith('[The user attached an image')) {
           const match = content.match(/\[The user attached an image\.\s*Here's what it contains:\s*([\s\S]*?)\]\s*([\s\S]*)/)
           if (match) {
@@ -77,22 +211,18 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
         continue
       }
       
-      // 处理assistant消息：收集连续的assistant消息，最后一个作为主回复，前面的作为思考过程
       if (msg.role === 'assistant') {
         const thinkingMessages = []
         let finalMessage = null
         
-        // 收集连续的assistant消息
         while (i < msgs.length && msgs[i].role === 'assistant') {
           const currentContent = msgs[i].content || ''
           
-          // 跳过空消息
           if (!currentContent.trim()) {
             i++
             continue
           }
           
-          // 检查是否是最后一条有实质内容的消息
           const isLastInGroup = (i + 1 >= msgs.length || msgs[i + 1].role !== 'assistant')
           
           if (isLastInGroup) {
@@ -103,7 +233,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
           i++
         }
         
-        // 如果有思考过程，创建可折叠结构
         if (thinkingMessages.length > 0 && finalMessage) {
           const thinkingId = `thinking_${result.length}`
           result.push({
@@ -118,9 +247,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
         continue
       }
       
-      // tool消息：作为思考过程的一部分
       if (msg.role === 'tool') {
-        // 跳过tool消息，它们通常包含在assistant的思考中
         i++
         continue
       }
@@ -134,7 +261,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
 
   const processedMessages = processMessages(messages)
 
-  // 切换思考过程显示
   const toggleThinking = (thinkingId) => {
     setExpandedThinking(prev => ({
       ...prev,
@@ -142,7 +268,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     }))
   }
 
-  // 自动滚动到底部
   useEffect(() => {
     if (autoScroll) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -199,7 +324,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
-          {/* 会话中断恢复提示 */}
           {interrupted && !isLoading && (
             <div style={{
               padding: '12px 20px',
@@ -212,29 +336,21 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 16 }}>⚠️</span>
-                <span style={{ color: 'var(--text-primary)', fontSize: 13 }}>
-                  会话似乎被中断了
-                </span>
+                <span style={{ color: 'var(--text-primary)', fontSize: 13 }}>会话似乎被中断了</span>
               </div>
-              <button
-                onClick={handleResume}
-                style={{
-                  padding: '6px 16px',
-                  background: 'var(--accent)',
-                  border: 'none',
-                  borderRadius: 'var(--radius)',
-                  color: 'var(--bg-primary)',
-                  cursor: 'pointer',
-                  fontSize: 13,
-                  fontWeight: 'bold',
-                }}
-              >
-                🔄 重新发送
-              </button>
+              <button onClick={handleResume} style={{
+                padding: '6px 16px',
+                background: 'var(--accent)',
+                border: 'none',
+                borderRadius: 'var(--radius)',
+                color: 'var(--bg-primary)',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 'bold',
+              }}>🔄 重新发送</button>
             </div>
           )}
 
-          {/* 消息列表 */}
           <div 
             ref={messagesContainerRef}
             onScroll={handleScroll}
@@ -244,7 +360,7 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               padding: 20,
               display: 'flex',
               flexDirection: 'column',
-              gap: 12,
+              gap: 16,
               position: 'relative',
             }}
           >
@@ -269,108 +385,148 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                  maxWidth: '85%',
+                  alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
                 }}
               >
-                {/* 思考过程折叠按钮 */}
-                {msg.hasThinking && (
-                  <button
-                    onClick={() => toggleThinking(msg.thinkingId)}
-                    style={{
-                      marginBottom: 4,
-                      padding: '2px 8px',
-                      background: 'var(--bg-secondary)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius)',
-                      color: 'var(--text-secondary)',
-                      cursor: 'pointer',
-                      fontSize: 11,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    <span style={{ 
-                      transform: expandedThinking[msg.thinkingId] ? 'rotate(90deg)' : 'rotate(0deg)',
-                      transition: 'transform 0.2s',
-                      display: 'inline-block',
-                    }}>
-                      ▶
-                    </span>
-                    思考过程 ({msg.thinkingContent.split('\n').length} 行)
-                  </button>
-                )}
-                
-                {/* 思考过程内容 */}
-                {msg.hasThinking && expandedThinking[msg.thinkingId] && (
+                {/* 用户消息 */}
+                {msg.role === 'user' && (
                   <div style={{
-                    marginBottom: 8,
-                    padding: '8px 12px',
-                    background: 'var(--bg-secondary)',
-                    borderRadius: 'var(--radius)',
-                    border: '1px solid var(--border)',
-                    maxWidth: '90%',
-                    fontSize: 11,
-                    color: 'var(--text-secondary)',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-all',
-                    lineHeight: 1.5,
-                    maxHeight: 200,
-                    overflowY: 'auto',
+                    padding: '10px 14px',
+                    borderRadius: '16px 16px 4px 16px',
+                    background: 'var(--accent)',
+                    color: 'var(--bg-primary)',
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    maxWidth: '100%',
+                    wordBreak: 'break-word',
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
                   }}>
-                    {msg.thinkingContent}
+                    {msg.hasImage && (
+                      <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 4 }}>📷 图片</div>
+                    )}
+                    {msg.content}
                   </div>
                 )}
                 
-                {/* 主消息 */}
-                <div style={{
-                  maxWidth: '70%',
-                  padding: '12px 16px',
-                  borderRadius: 'var(--radius)',
-                  background: msg.role === 'user' ? 'var(--accent)' : 'var(--bg-card)',
-                  color: msg.role === 'user' ? 'var(--bg-primary)' : 'var(--text-primary)',
-                  wordBreak: 'break-word',
-                  whiteSpace: 'pre-wrap',
-                }}>
-                  {msg.hasImage && (
+                {/* AI消息 */}
+                {msg.role === 'assistant' && (
+                  <>
+                    {/* 思考过程折叠按钮 */}
+                    {msg.hasThinking && (
+                      <button
+                        onClick={() => toggleThinking(msg.thinkingId)}
+                        style={{
+                          marginBottom: 6,
+                          padding: '4px 10px',
+                          background: 'var(--bg-secondary)',
+                          border: '1px solid var(--border)',
+                          borderRadius: 12,
+                          color: 'var(--text-secondary)',
+                          cursor: 'pointer',
+                          fontSize: 11,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.background = 'var(--bg-card)'
+                          e.currentTarget.style.borderColor = 'var(--accent)'
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.background = 'var(--bg-secondary)'
+                          e.currentTarget.style.borderColor = 'var(--border)'
+                        }}
+                      >
+                        <span style={{ 
+                          transform: expandedThinking[msg.thinkingId] ? 'rotate(90deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                          display: 'inline-block',
+                          fontSize: 10,
+                        }}>▶</span>
+                        <span style={{ opacity: 0.7 }}>思考过程</span>
+                        <span style={{ 
+                          background: 'var(--accent)', 
+                          color: 'var(--bg-primary)', 
+                          padding: '0 4px', 
+                          borderRadius: 8, 
+                          fontSize: 10 
+                        }}>
+                          {msg.thinkingContent.split('\n').length}
+                        </span>
+                      </button>
+                    )}
+                    
+                    {/* 思考过程内容 */}
+                    {msg.hasThinking && expandedThinking[msg.thinkingId] && (
+                      <div style={{
+                        marginBottom: 8,
+                        padding: '10px 14px',
+                        background: 'var(--bg-secondary)',
+                        borderRadius: '12px',
+                        border: '1px solid var(--border)',
+                        width: '100%',
+                        fontSize: 12,
+                        color: 'var(--text-secondary)',
+                        maxHeight: 200,
+                        overflowY: 'auto',
+                        fontFamily: 'monospace',
+                        lineHeight: 1.6,
+                      }}>
+                        <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                          {msg.thinkingContent}
+                        </pre>
+                      </div>
+                    )}
+                    
+                    {/* AI回复 - 使用Markdown渲染 */}
                     <div style={{
-                      fontSize: 11,
-                      opacity: 0.7,
-                      marginBottom: 4,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
+                      padding: '12px 16px',
+                      borderRadius: '16px 16px 16px 4px',
+                      background: 'var(--bg-card)',
+                      color: 'var(--text-primary)',
+                      fontSize: 14,
+                      lineHeight: 1.6,
+                      maxWidth: '100%',
+                      wordBreak: 'break-word',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                      border: '1px solid var(--border)',
                     }}>
-                      📷 图片
+                      {renderMarkdown(msg.content)}
                     </div>
-                  )}
-                  {msg.content}
-                </div>
+                  </>
+                )}
               </div>
             ))}
 
             {/* 流式输出 */}
             {streamingText && (
-              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-start', maxWidth: '85%' }}>
                 <div
                   ref={lastMessageRef}
                   style={{
-                    maxWidth: '70%',
                     padding: '12px 16px',
-                    borderRadius: 'var(--radius)',
+                    borderRadius: '16px 16px 16px 4px',
                     background: 'var(--bg-card)',
                     color: 'var(--text-primary)',
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    maxWidth: '100%',
                     wordBreak: 'break-word',
-                    whiteSpace: 'pre-wrap',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                    border: '1px solid var(--border)',
                   }}
                 >
-                  {streamingText}
+                  {renderMarkdown(streamingText)}
                   <span style={{ 
                     display: 'inline-block',
-                    width: 8,
-                    height: 16,
+                    width: 6,
+                    height: 14,
                     background: 'var(--accent)',
                     marginLeft: 2,
                     animation: 'blink 1s infinite',
+                    borderRadius: 1,
                   }} />
                 </div>
               </div>
@@ -380,11 +536,14 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
                 <div style={{
                   padding: '12px 16px',
-                  borderRadius: 'var(--radius)',
+                  borderRadius: '16px 16px 16px 4px',
                   background: 'var(--bg-card)',
                   color: 'var(--text-secondary)',
+                  fontSize: 14,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.15)',
+                  border: '1px solid var(--border)',
                 }}>
-                  思考中...
+                  <span style={{ animation: 'pulse 1.5s infinite' }}>思考中...</span>
                 </div>
               </div>
             )}
@@ -392,7 +551,6 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
             <div ref={messagesEndRef} />
           </div>
 
-          {/* 滚动按钮 */}
           {(showScrollTop || !autoScroll) && (
             <div style={{
               position: 'absolute',
@@ -404,130 +562,59 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               zIndex: 10,
             }}>
               {showScrollTop && (
-                <button
-                  onClick={scrollToTop}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '50%',
-                    background: 'var(--bg-card)',
-                    border: '1px solid var(--border)',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                  }}
-                  title="回到顶部"
-                >
-                  ⬆
-                </button>
+                <button onClick={scrollToTop} style={{
+                  width: 36, height: 36, borderRadius: '50%',
+                  background: 'var(--bg-card)', border: '1px solid var(--border)',
+                  color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                }} title="回到顶部">⬆</button>
               )}
               {!autoScroll && (
-                <button
-                  onClick={scrollToBottom}
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '50%',
-                    background: 'var(--accent)',
-                    border: 'none',
-                    color: 'var(--bg-primary)',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-                  }}
-                  title="回到底部"
-                >
-                  ⬇
-                </button>
+                <button onClick={scrollToBottom} style={{
+                  width: 36, height: 36, borderRadius: '50%',
+                  background: 'var(--accent)', border: 'none',
+                  color: 'var(--bg-primary)', cursor: 'pointer', fontSize: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                }} title="回到底部">⬇</button>
               )}
             </div>
           )}
 
-          {/* 输入框 */}
           <form onSubmit={handleSubmit} style={{
-            padding: '16px 20px',
+            padding: '12px 16px',
             borderTop: '1px solid var(--border)',
             display: 'flex',
-            gap: 12,
+            gap: 10,
             alignItems: 'center',
+            background: 'var(--bg-secondary)',
           }}>
-            <input
-              type="file"
-              ref={fileInputRef}
-              style={{ display: 'none' }}
-              onChange={(e) => onFileUpload(Array.from(e.target.files))}
-              multiple
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              style={{
-                padding: '8px 12px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 18,
-              }}
-              title="上传文件"
-            >
-              📎
-            </button>
+            <input type="file" ref={fileInputRef} style={{ display: 'none' }}
+              onChange={(e) => onFileUpload(Array.from(e.target.files))} multiple />
+            <button type="button" onClick={() => fileInputRef.current?.click()} style={{
+              padding: '8px', border: 'none', borderRadius: 'var(--radius)',
+              background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18,
+            }} title="上传文件">📎</button>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="输入消息... (拖拽文件可直接上传)"
+              placeholder="输入消息..."
               disabled={isLoading}
               style={{
-                flex: 1,
-                padding: '12px 16px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                background: 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                fontSize: 14,
-                outline: 'none',
-                opacity: isLoading ? 0.7 : 1,
+                flex: 1, padding: '10px 14px', border: '1px solid var(--border)',
+                borderRadius: 20, background: 'var(--bg-primary)', color: 'var(--text-primary)',
+                fontSize: 14, outline: 'none', opacity: isLoading ? 0.7 : 1,
               }}
             />
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              style={{
-                padding: '8px 20px',
-                border: 'none',
-                borderRadius: 'var(--radius)',
-                background: (input.trim() && !isLoading) ? 'var(--accent)' : 'var(--border)',
-                color: (input.trim() && !isLoading) ? 'var(--bg-primary)' : 'var(--text-secondary)',
-                cursor: (input.trim() && !isLoading) ? 'pointer' : 'not-allowed',
-                fontWeight: 'bold',
-              }}
-            >
-              {isLoading ? '等待中...' : '发送'}
-            </button>
-            <button
-              type="button"
-              onClick={onToggleContext}
-              style={{
-                padding: '8px 10px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                background: showContextPanel ? 'var(--accent)' : 'var(--bg-secondary)',
-                color: showContextPanel ? 'var(--bg-primary)' : 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              title={showContextPanel ? '隐藏面板' : '显示面板'}
-            >
-              ☰
+            <button type="submit" disabled={!input.trim() || isLoading} style={{
+              padding: '8px 16px', border: 'none', borderRadius: 20,
+              background: (input.trim() && !isLoading) ? 'var(--accent)' : 'var(--border)',
+              color: (input.trim() && !isLoading) ? 'var(--bg-primary)' : 'var(--text-secondary)',
+              cursor: (input.trim() && !isLoading) ? 'pointer' : 'not-allowed',
+              fontWeight: 'bold', fontSize: 14,
+            }}>
+              {isLoading ? '...' : '发送'}
             </button>
           </form>
 
@@ -535,6 +622,10 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; }
         }
       `}</style>
     </div>
