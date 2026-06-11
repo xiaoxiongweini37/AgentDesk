@@ -625,6 +625,67 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Handle mark message as read
+  if (req.url.match(/^\/api\/messages\/[^/]+\/[^/]+\/read$/) && req.method === 'POST') {
+    const parts = req.url.split('/')
+    const agentId = parts[3]
+    const msgId = parts[4]
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
+      // 调用 mark_read 功能
+      const result = execSync(`python3 -c "
+import sys
+sys.path.insert(0, '${process.env.HOME}/.hermes/agent-orchestrator')
+from message_bus import message_bus
+message_bus.mark_read('${agentId}', '${msgId}')
+print('ok')
+"`, { encoding: 'utf8', timeout: 5000 })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true }))
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err.message }))
+    }
+    return
+  }
+
+  // Handle update task status
+  if (req.url.match(/^\/api\/tasks\/[^/]+$/) && req.method === 'PUT') {
+    const taskId = req.url.split('/')[3]
+    let body = ''
+    req.on('data', chunk => body += chunk)
+    req.on('end', () => {
+      try {
+        const update = JSON.parse(body)
+        const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py'
+        const result = execSync(`python3 -c "
+import sys
+sys.path.insert(0, '${process.env.HOME}/.hermes/agent-orchestrator')
+from task_manager import task_manager
+task = task_manager.get_task('${taskId}')
+if task:
+    if '${update.status}' == 'assigned':
+        task_manager.assign_task('${taskId}', task.get('assigned_to', 'worker'))
+    elif '${update.status}' == 'in_progress':
+        task_manager.start_task('${taskId}')
+    elif '${update.status}' == 'completed':
+        task_manager.complete_task('${taskId}')
+    elif '${update.status}' == 'failed':
+        task_manager.fail_task('${taskId}')
+    print('ok')
+else:
+    print('not found')
+"`, { encoding: 'utf8', timeout: 5000 })
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ success: true }))
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+    return
+  }
+
   // Handle auto-assign tasks endpoint
   if (req.url === '/api/tasks/auto-assign' && req.method === 'POST') {
     try {
