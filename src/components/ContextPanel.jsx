@@ -314,42 +314,6 @@ function ContextContent({ data, mounts, onAddMount, onRemoveMount, onBrowseFile,
         </div>
       </Section>
 
-      {/* 关联文件 */}
-      <Section title="关联文件" icon="📎" style={{ marginTop: 20 }}>
-        {data.files.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {data.files.map((file, i) => (
-              <div key={i} style={{
-                padding: '6px 10px',
-                background: 'var(--bg-card)',
-                borderRadius: 'var(--radius)',
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-                fontFamily: 'monospace',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}>
-                📄 {file}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div style={{
-            padding: '12px',
-            background: 'var(--bg-card)',
-            borderRadius: 'var(--radius)',
-            border: '1px dashed var(--border)',
-            textAlign: 'center',
-            color: 'var(--text-secondary)',
-            fontSize: 13,
-          }}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>📁</div>
-            <div>暂无关联文件</div>
-          </div>
-        )}
-      </Section>
-
       {/* 使用的工具 */}
       <Section title="使用的工具" icon="🔧" style={{ marginTop: 20 }}>
         {data.tools.length > 0 ? (
