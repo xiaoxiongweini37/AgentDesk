@@ -491,6 +491,78 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ status: 'ok', platform: 'hermes-agent' }));
     return;
   }
+  // Handle file upload (read content)
+  if (req.url === '/api/files/read' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { path: filePath } = JSON.parse(body);
+        const expandedPath = filePath.replace(/^~/, os.homedir());
+        
+        if (!fs.existsSync(expandedPath)) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: '文件不存在' }));
+          return;
+        }
+        
+        const stat = fs.statSync(expandedPath);
+        const ext = path.extname(expandedPath).toLowerCase();
+        
+        // 图片文件返回base64
+        const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+        if (imageExts.includes(ext)) {
+          const data = fs.readFileSync(expandedPath);
+          const base64 = data.toString('base64');
+          const mime = ext === '.png' ? 'image/png' : 
+                      ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' :
+                      ext === '.gif' ? 'image/gif' :
+                      ext === '.webp' ? 'image/webp' : 'image/bmp';
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            type: 'image', 
+            mime,
+            base64,
+            name: path.basename(expandedPath),
+            size: stat.size,
+          }));
+          return;
+        }
+        
+        // 文本文件返回内容
+        const textExts = ['.txt', '.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.json',
+                          '.yaml', '.yml', '.toml', '.cfg', '.ini', '.conf',
+                          '.html', '.css', '.sh', '.bash', '.c', '.cpp', '.h',
+                          '.java', '.go', '.rs', '.sql', '.xml', '.csv', '.log'];
+        
+        if (textExts.includes(ext)) {
+          const content = fs.readFileSync(expandedPath, 'utf8').substring(0, 50000);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            type: 'text', 
+            content,
+            name: path.basename(expandedPath),
+            size: stat.size,
+          }));
+          return;
+        }
+        
+        // 其他文件返回元信息
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          type: 'binary', 
+          name: path.basename(expandedPath),
+          size: stat.size,
+          message: `[二进制文件: ${path.basename(expandedPath)} (${stat.size} bytes)]`,
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
   // Handle file browser endpoint
   if (req.url.match(/^\/api\/files\/browse/) && req.method === 'GET') {
     const url = new URL(req.url, `http://${req.headers.host}`);

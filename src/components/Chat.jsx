@@ -305,11 +305,76 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     }
   }
 
+  // 粘贴图片支持
+  const handlePaste = async (e) => {
+    const items = Array.from(e.clipboardData?.items || [])
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault()
+        const file = item.getAsFile()
+        if (file) {
+          // 转为base64
+          const reader = new FileReader()
+          reader.onload = () => {
+            const base64 = reader.result
+            // 发送图片消息
+            onSend(`[图片: ${file.name || 'pasted-image.png'}]\n${base64}`)
+          }
+          reader.readAsDataURL(file)
+        }
+        return
+      }
+    }
+  }
+
+  // 文件选择（📎按钮）
+  const handleFileSelect = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    
+    for (const file of files) {
+      if (file.type.startsWith('image/')) {
+        // 图片转base64发送
+        const reader = new FileReader()
+        reader.onload = () => {
+          onSend(`[图片: ${file.name}]\n${reader.result}`)
+        }
+        reader.readAsDataURL(file)
+      } else {
+        // 文本文件读取内容
+        const reader = new FileReader()
+        reader.onload = () => {
+          const content = reader.result
+          onSend(`[文件: ${file.name}]\n\`\`\`\n${content}\n\`\`\``)
+        }
+        reader.readAsText(file)
+      }
+    }
+    
+    // 清空input，允许重复选择同一文件
+    e.target.value = ''
+  }
+
   const handleDrop = (e) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files)
     if (files.length > 0) {
-      onFileUpload(files)
+      // 直接触发文件选择逻辑
+      files.forEach(file => {
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader()
+          reader.onload = () => {
+            onSend(`[图片: ${file.name}]\n${reader.result}`)
+          }
+          reader.readAsDataURL(file)
+        } else {
+          const reader = new FileReader()
+          reader.onload = () => {
+            onSend(`[文件: ${file.name}]\n\`\`\`\n${reader.result}\n\`\`\``)
+          }
+          reader.readAsText(file)
+        }
+      })
     }
   }
 
@@ -591,23 +656,30 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
             background: 'var(--bg-secondary)',
           }}>
             <input type="file" ref={fileInputRef} style={{ display: 'none' }}
-              onChange={(e) => onFileUpload(Array.from(e.target.files))} multiple />
+              onChange={handleFileSelect} multiple accept="image/*,.txt,.md,.py,.js,.jsx,.ts,.tsx,.json,.yaml,.yml,.csv,.log,.html,.css,.sh" />
             <button type="button" onClick={() => fileInputRef.current?.click()} style={{
               padding: '8px', border: 'none', borderRadius: 'var(--radius)',
               background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 18,
-            }} title="上传文件">📎</button>
+            }} title="上传文件或图片">📎</button>
             <input
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="输入消息..."
+              onPaste={handlePaste}
+              placeholder="输入消息... (支持粘贴图片)"
               disabled={isLoading}
               style={{
-                flex: 1, padding: '10px 14px', border: '1px solid var(--border)',
-                borderRadius: 20, background: 'var(--bg-primary)', color: 'var(--text-primary)',
-                fontSize: 14, outline: 'none', opacity: isLoading ? 0.7 : 1,
+                flex: 1,
+                padding: '10px 14px',
+                border: '1px solid var(--border)',
+                borderRadius: 20,
+                background: 'var(--bg-primary)',
+                color: 'var(--text-primary)',
+                fontSize: 14,
+                outline: 'none',
+                opacity: isLoading ? 0.7 : 1,
               }}
             />
-            <button type="submit" disabled={!input.trim() || isLoading} style={{
+            <button type="submit" disabled={!input.trim() && !isLoading} style={{
               padding: '8px 16px', border: 'none', borderRadius: 20,
               background: (input.trim() && !isLoading) ? 'var(--accent)' : 'var(--border)',
               color: (input.trim() && !isLoading) ? 'var(--bg-primary)' : 'var(--text-secondary)',
