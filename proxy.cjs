@@ -362,17 +362,17 @@ function getAgentTasks(agentId) {
   }
 }
 
-// Dashboard data endpoint - 从会话文件读取结构化数据
+// Dashboard data endpoint - 从配置读取Agent列表
 function getDashboardData() {
   const currentSessionId = getCurrentSessionId();
   
-  const agents = [
-    { id: 'commander', name: '总指挥', role: '协调·监控·读图', tmux: null, sessionId: currentSessionId },
-    { id: 'worker', name: 'A号', role: '速度型编码', tmux: 'worker', profile: 'worker' },
-    { id: 'coder-b', name: 'B号', role: '严谨型编码', tmux: 'coder-b', profile: 'coder-b' },
-    { id: 'coder-c', name: 'C号', role: '测试评估', tmux: 'coder-c', profile: 'coder-c' },
-    { id: 'claude-code', name: 'Claude', role: 'Claude Code CLI', tmux: 'claude-code' },
-  ];
+  // 从配置读取Agent列表
+  const agents = getAgentList().map(agent => {
+    if (agent.id === 'commander') {
+      return { ...agent, tmux: null, sessionId: currentSessionId };
+    }
+    return agent;
+  });
   
     return agents.map(agent => {
       // 获取消息和任务
@@ -438,6 +438,37 @@ function getDashboardData() {
   });
 }
 
+const yaml = require('yaml');
+
+// 加载配置
+function loadConfig() {
+  const configPath = path.join(process.env.HOME, '.hermes/agent-orchestrator/config.yaml');
+  try {
+    if (fs.existsSync(configPath)) {
+      const content = fs.readFileSync(configPath, 'utf8');
+      return yaml.parse(content) || {};
+    }
+  } catch (err) {
+    console.error('Failed to load config:', err.message);
+  }
+  return {};
+}
+
+const appConfig = loadConfig();
+
+// 获取Agent列表
+function getAgentList() {
+  const agents = appConfig.agents || {};
+  return Object.entries(agents).map(([id, config]) => ({
+    id,
+    name: config.name || id,
+    role: config.role || '',
+    tmux: config.tmux || null,
+    profile: config.profile || null,
+    capabilities: config.capabilities || [],
+  }));
+}
+
 const server = http.createServer((req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -456,7 +487,14 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ status: 'ok', platform: 'hermes-agent' }));
     return;
   }
+  // Handle agents list endpoint
+  if (req.url === '/api/agents' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getAgentList()));
+    return;
+  }
 
+  // Handle session ID endpoint
   // Handle session ID endpoint
   if (req.url === '/api/session-id') {
     const sessionId = getCurrentSessionId();

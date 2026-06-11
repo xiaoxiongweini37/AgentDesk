@@ -1,14 +1,7 @@
 import { useState, useEffect } from 'react'
+import useAgentConfig from '../hooks/useAgentConfig'
 
 const API_BASE = 'http://localhost:3001'
-
-const AGENTS = [
-  { id: 'commander', name: '总指挥', icon: '🎯', color: '#4fc3f7' },
-  { id: 'worker', name: 'A号', icon: '⚡', color: '#ff9800' },
-  { id: 'coder-b', name: 'B号', icon: '🔧', color: '#4caf50' },
-  { id: 'coder-c', name: 'C号', icon: '🧪', color: '#9c27b0' },
-  { id: 'claude-code', name: 'Claude', icon: '🤖', color: '#e91e63' },
-]
 
 const MESSAGE_TYPES = [
   { value: 'task', label: '任务', color: '#ff9800', icon: '📋' },
@@ -19,6 +12,7 @@ const MESSAGE_TYPES = [
 ]
 
 export default function MessagePanel({ isOpen, onClose }) {
+  const { agents, getAgent } = useAgentConfig()
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState('all')
@@ -85,9 +79,6 @@ export default function MessagePanel({ isOpen, onClose }) {
       console.error('标记已读失败:', err)
     }
   }
-
-  // 获取Agent信息
-  const getAgent = (id) => AGENTS.find(a => a.id === id) || { name: id, icon: '❓', color: '#666' }
 
   // 获取消息类型信息
   const getMsgType = (type) => MESSAGE_TYPES.find(t => t.value === type) || MESSAGE_TYPES[4]
