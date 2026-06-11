@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import FileBrowser from './FileBrowser'
 
 const API_BASE = 'http://localhost:3001'
 
@@ -8,7 +9,8 @@ export default function ContextPanel({ sessionId, onClose }) {
   const [mounts, setMounts] = useState([])
   const [loading, setLoading] = useState(true)
   const [showMountModal, setShowMountModal] = useState(false)
-  const [mountPath, setMountPath] = useState('')
+  const [showFileBrowser, setShowFileBrowser] = useState(false)
+  const [browseMode, setBrowseMode] = useState('both')
 
   // 获取上下文数据和挂载
   useEffect(() => {
@@ -78,14 +80,14 @@ export default function ContextPanel({ sessionId, onClose }) {
   }
 
   // 添加挂载
-  const handleAddMount = async () => {
-    if (!mountPath.trim()) return
+  const handleAddMount = async (selectedPath) => {
+    if (!selectedPath) return
     
     try {
       const res = await fetch(`${API_BASE}/api/mounts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId, path: mountPath }),
+        body: JSON.stringify({ session_id: sessionId, path: selectedPath }),
       })
       
       if (res.ok) {
@@ -94,8 +96,6 @@ export default function ContextPanel({ sessionId, onClose }) {
           alert(result.error)
         } else {
           setMounts(prev => [...prev, result.mount])
-          setMountPath('')
-          setShowMountModal(false)
         }
       }
     } catch (err) {
@@ -205,80 +205,13 @@ export default function ContextPanel({ sessionId, onClose }) {
         )}
       </div>
 
-      {/* 挂载模态框 */}
-      {showMountModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1100,
-        }} onClick={() => setShowMountModal(false)}>
-          <div style={{
-            background: 'var(--bg-card)',
-            borderRadius: 'var(--radius)',
-            padding: 20,
-            width: 400,
-            border: '1px solid var(--border)',
-          }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin: '0 0 16px', color: 'var(--text-primary)' }}>
-              📁 挂载文件/文件夹
-            </h3>
-            
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', marginBottom: 4, fontSize: 12, color: 'var(--text-secondary)' }}>
-                路径（支持绝对路径或~开头）
-              </label>
-              <input
-                value={mountPath}
-                onChange={e => setMountPath(e.target.value)}
-                placeholder="/path/to/file 或 ~/projects/myapp"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid var(--border)',
-                  borderRadius: 'var(--radius)',
-                  background: 'var(--bg-secondary)',
-                  color: 'var(--text-primary)',
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                }}
-                autoFocus
-              />
-            </div>
-            
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
-              💡 挂载后，AI对话时会自动读取文件内容作为上下文
-            </div>
-            
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-              <button onClick={() => setShowMountModal(false)} style={{
-                padding: '8px 16px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                background: 'transparent',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-              }}>
-                取消
-              </button>
-              <button onClick={handleAddMount} style={{
-                padding: '8px 16px',
-                border: 'none',
-                borderRadius: 'var(--radius)',
-                background: 'var(--accent)',
-                color: 'var(--bg-primary)',
-                cursor: 'pointer',
-                fontWeight: 'bold',
-              }}>
-                挂载
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 文件浏览器 */}
+      <FileBrowser
+        isOpen={showFileBrowser}
+        onClose={() => setShowFileBrowser(false)}
+        onSelect={handleAddMount}
+        mode={browseMode}
+      />
     </div>
   )
 }
@@ -344,7 +277,10 @@ function ContextContent({ data, mounts, onAddMount, onRemoveMount }) {
         </div>
         
         <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={onAddMount} style={{
+          <button onClick={() => {
+            setBrowseMode('directory')
+            setShowFileBrowser(true)
+          }} style={{
             flex: 1,
             padding: '8px',
             background: 'transparent',
@@ -360,7 +296,10 @@ function ContextContent({ data, mounts, onAddMount, onRemoveMount }) {
           }}>
             📁 挂载文件夹
           </button>
-          <button onClick={onAddMount} style={{
+          <button onClick={() => {
+            setBrowseMode('file')
+            setShowFileBrowser(true)
+          }} style={{
             flex: 1,
             padding: '8px',
             background: 'transparent',

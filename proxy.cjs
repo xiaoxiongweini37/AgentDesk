@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync } = require('child_process');
 
 const API_HOST = 'localhost';
@@ -487,6 +488,53 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ status: 'ok', platform: 'hermes-agent' }));
     return;
   }
+  // Handle file browser endpoint
+  if (req.url.match(/^\/api\/files\/browse/) && req.method === 'GET') {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const dirPath = url.searchParams.get('path') || os.homedir();
+    try {
+      const expandedPath = dirPath.replace(/^~/, os.homedir());
+      const items = [];
+      const entries = fs.readdirSync(expandedPath, { withFileTypes: true });
+      
+      // 跳过的目录
+      const skipDirs = new Set(['.git', 'node_modules', '__pycache__', '.venv', 'venv', '.next', 'dist', '.cache']);
+      
+      for (const entry of entries) {
+        // 跳过隐藏文件和特殊目录
+        if (entry.name.startsWith('.') && !entry.name.startsWith('..')) continue
+        if (skipDirs.has(entry.name)) continue
+        
+        try {
+          const fullPath = path.join(expandedPath, entry.name);
+          const stat = fs.statSync(fullPath);
+          items.push({
+            name: entry.name,
+            path: fullPath,
+            type: entry.isDirectory() ? 'directory' : 'file',
+            size: stat.size,
+            modified: stat.mtime,
+          });
+        } catch (e) {
+          // 跳过无法访问的文件
+        }
+      }
+      
+      // 排序：文件夹在前，然后按名称
+      items.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ path: expandedPath, items }));
+    } catch (err) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   // Handle mounts endpoint
   if (req.url.match(/^\/api\/mounts/) && req.method === 'GET') {
     const url = new URL(req.url, `http://${req.headers.host}`);
