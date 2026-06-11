@@ -321,53 +321,13 @@ function getFullSession(sessionId) {
 // 获取指定 Agent 的最近会话
 function getAgentSessions(agentId, limit = 10) {
   try {
-    const sessionsDir = '/home/jinzhong/.hermes/sessions';
-    const files = fs.readdirSync(sessionsDir)
-      .filter(f => f.startsWith('session_') && f.endsWith('.json'))
-      .filter(f => !f.includes('api-') && !f.includes('cron_'))
-      .map(f => ({
-        name: f,
-        mtime: fs.statSync(path.join(sessionsDir, f)).mtime
-      }))
-      .sort((a, b) => b.mtime - a.mtime);
-    
-    const results = [];
-    
-    for (const { name: f } of files) {
-      if (results.length >= limit) break;
-      
-      const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, f), 'utf8'));
-      
-      // Agent 筛选
-      if (data.agent_id !== agentId) continue;
-      
-      const messages = data.messages || [];
-      const userMsgs = messages.filter(m => m.role === 'user');
-      
-      let title = '未命名会话';
-      for (let i = userMsgs.length - 1; i >= 0; i--) {
-        const content = userMsgs[i].content || '';
-        if (content.length > 5 && !content.startsWith('Review the conversation') && !content.startsWith('[IMPORTANT')) {
-          title = content.substring(0, 40) + (content.length > 40 ? '...' : '');
-          break;
-        }
-      }
-      
-      // 获取最后一条用户消息作为预览
-      const lastUserMsg = userMsgs[userMsgs.length - 1];
-      const preview = lastUserMsg ? (lastUserMsg.content || '').substring(0, 80) : '';
-      
-      results.push({
-        id: data.session_id || f.replace('session_', '').replace('.json', ''),
-        title,
-        preview,
-        messageCount: messages.length,
-        agentId: data.agent_id || 'commander',
-        lastActive: data.last_active || fs.statSync(path.join(sessionsDir, f)).mtime.getTime() / 1000,
-      });
-    }
-    
-    return results;
+    // 使用独立的 Python 脚本获取 Agent 会话
+    const scriptPath = process.env.HOME + '/.hermes/scripts/agent_sessions.py';
+    const result = execSync(`python3 ${scriptPath} ${agentId} null ${limit}`, {
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    return JSON.parse(result);
   } catch (err) {
     console.error('Error getting agent sessions:', err);
     return [];
@@ -489,16 +449,28 @@ const server = http.createServer((req, res) => {
     const query = url.searchParams.get('q') || '';
     const agentId = url.searchParams.get('agent') || null;
     
-    // 优先用 Python 脚本搜索（读 state.db）
-    const dbResults = searchSessionsFromDb(query, agentId);
-    if (dbResults.length > 0) {
+    if (agentId) {
+      // 按 Agent 筛选：使用独立的 Python 脚本
+      const scriptPath = process.env.HOME + '/.hermes/scripts/agent_sessions.py';
+      const escapedQuery = query.replace(/"/g, '\\"');
+      const cmd = `python3 ${scriptPath} ${agentId} "${escapedQuery}" 20`;
+      const result = execSync(cmd, {
+        encoding: 'utf8',
+        timeout: 10000,
+      });
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(dbResults));
+      res.end(result);
     } else {
-      // 回退到文件搜索
-      const fallbackResults = searchSessions(query, agentId);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(fallbackResults));
+      // 全部搜索：使用原有的搜索逻辑
+      const dbResults = searchSessionsFromDb(query);
+      if (dbResults.length > 0) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(dbResults));
+      } else {
+        const fallbackResults = searchSessions(query);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(fallbackResults));
+      }
     }
     return;
   }
@@ -518,7 +490,7 @@ const server = http.createServer((req, res) => {
   }
 
   // Handle agent sessions endpoint
-  if (req.url.match(/^\/api\/agents\/[^/]+\/sessions$/)) {
+  if (req.url.match(/^\/api\/agents\/[^/]+\/sessions/)) {
     const agentId = req.url.split('/')[3];
     const url = new URL(req.url, `http://${req.headers.host}`);
     const limit = parseInt(url.searchParams.get('limit') || '10');
