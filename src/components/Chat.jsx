@@ -616,6 +616,22 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
             }}>
               {isLoading ? '...' : '发送'}
             </button>
+            <button
+              type="button"
+              onClick={onToggleContext}
+              style={{
+                padding: '8px 10px',
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius)',
+                background: showContextPanel ? 'var(--accent)' : 'transparent',
+                color: showContextPanel ? 'var(--bg-primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              title={showContextPanel ? '隐藏上下文面板' : '显示上下文面板'}
+            >
+              ☰
+            </button>
           </form>
 
       <style>{`
