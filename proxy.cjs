@@ -612,10 +612,27 @@ const server = http.createServer((req, res) => {
         const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
         const assigned = task.assigned_to || '';
         const priority = task.priority || 'normal';
-        const result = execSync(`python3 ${scriptPath} create "${task.title}" "${task.description || ''}" ${assigned} ${priority}`, {
+        const escapedTitle = task.title.replace(/"/g, '\\"');
+        const escapedDesc = (task.description || '').replace(/"/g, '\\"');
+        const result = execSync(`python3 ${scriptPath} create "${escapedTitle}" "${escapedDesc}" ${assigned} ${priority}`, {
           encoding: 'utf8',
-          timeout: 5000,
+          timeout: 10000,
         });
+        
+        // 如果任务已分配，发送消息通知Agent
+        const taskResult = JSON.parse(result);
+        if (taskResult.assigned_to) {
+          const msgPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
+          const msgContent = `新任务: ${task.title}\n${task.description || ''}`;
+          try {
+            execSync(`python3 ${msgPath} send commander ${taskResult.assigned_to} task "${msgContent.replace(/"/g, '\\"')}" ${priority}`, {
+              encoding: 'utf8', timeout: 5000,
+            });
+          } catch (e) {
+            console.error('Failed to send task notification:', e.message);
+          }
+        }
+        
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(result);
       } catch (err) {
@@ -725,6 +742,40 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({ error: err.message }))
       }
     })
+    return
+  }
+
+  // Handle agent task queue endpoint
+  if (req.url.match(/^\/api\/tasks\/queue\/[^/]+$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[4]
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py'
+      const result = execSync(`python3 ${scriptPath} queue ${agentId}`, {
+        encoding: 'utf8', timeout: 5000,
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(result)
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end('[]')
+    }
+    return
+  }
+
+  // Handle get next task for agent
+  if (req.url.match(/^\/api\/tasks\/queue\/[^/]+\/next$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[4]
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py'
+      const result = execSync(`python3 ${scriptPath} next ${agentId}`, {
+        encoding: 'utf8', timeout: 5000,
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(result)
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end('null')
+    }
     return
   }
 
