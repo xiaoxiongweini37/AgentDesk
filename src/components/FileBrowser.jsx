@@ -4,7 +4,7 @@ const API_BASE = 'http://localhost:3001'
 
 export default function FileBrowser({ isOpen, onClose, onSelect, mode = 'both' }) {
   // mode: 'file', 'directory', 'both'
-  const [currentPath, setCurrentPath] = useState('/home/jinzhong')
+  const [currentPath, setCurrentPath] = useState('/mnt/d')
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
