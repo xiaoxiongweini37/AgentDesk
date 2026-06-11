@@ -10,6 +10,33 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
   const fileInputRef = useRef(null)
   const lastMessageRef = useRef(null)
 
+  // 检测会话是否中断
+  const isSessionInterrupted = () => {
+    if (messages.length === 0) return false
+    const lastMsg = messages[messages.length - 1]
+    // 最后一条是用户消息（等待回复时中断）
+    if (lastMsg.role === 'user') return true
+    // 最后一条是错误消息
+    if (lastMsg.role === 'assistant' && lastMsg.content?.startsWith('❌')) return true
+    return false
+  }
+
+  // 获取最后一条用户消息（用于重新发送）
+  const getLastUserMessage = () => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'user') return messages[i].content
+    }
+    return null
+  }
+
+  // 恢复会话
+  const handleResume = () => {
+    const lastUserMsg = getLastUserMessage()
+    if (lastUserMsg && !isLoading) {
+      onSend(lastUserMsg)
+    }
+  }
+
   // 过滤系统消息
   const filteredMessages = messages.filter(msg => {
     const content = msg.content || ''
@@ -104,11 +131,48 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
     e.preventDefault()
   }
 
+  const interrupted = isSessionInterrupted()
+
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative', minHeight: 0, overflow: 'hidden' }}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
+          {/* 会话中断恢复提示 */}
+          {interrupted && !isLoading && (
+            <div style={{
+              padding: '12px 20px',
+              background: 'rgba(255, 152, 0, 0.1)',
+              borderBottom: '1px solid rgba(255, 152, 0, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>⚠️</span>
+                <span style={{ color: 'var(--text-primary)', fontSize: 13 }}>
+                  会话似乎被中断了
+                </span>
+              </div>
+              <button
+                onClick={handleResume}
+                style={{
+                  padding: '6px 16px',
+                  background: 'var(--accent)',
+                  border: 'none',
+                  borderRadius: 'var(--radius)',
+                  color: 'var(--bg-primary)',
+                  cursor: 'pointer',
+                  fontSize: 13,
+                  fontWeight: 'bold',
+                }}
+              >
+                🔄 重新发送
+              </button>
+            </div>
+          )}
+
           {/* 消息列表 */}
           <div 
             ref={messagesContainerRef}
