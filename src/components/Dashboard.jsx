@@ -209,6 +209,22 @@ export default function Dashboard() {
     userScrolledRef.current[agentId] = !atBottom
   }
 
+  // 获取实时状态
+  const fetchStatus = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/api/agents/status`)
+      if (response.ok) {
+        const statusData = await response.json()
+        setAgents(prev => prev.map(agent => ({
+          ...agent,
+          realTimeStatus: statusData[agent.id] || null,
+        })))
+      }
+    } catch (err) {
+      // 静默失败
+    }
+  }
+
   const fetchDashboard = async (append = false) => {
     try {
       const response = await fetch(`${API_BASE}/api/dashboard`)
@@ -279,6 +295,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchDashboard(false)
+    // 定时刷新状态
+    const statusInterval = setInterval(fetchStatus, 5000) // 每5秒刷新
+    return () => clearInterval(statusInterval)
   }, [])
 
   useEffect(() => {
@@ -443,7 +462,27 @@ export default function Dashboard() {
                 </div>
               )}
               
-              <div style={{ padding: '8px 16px', background: 'var(--bg-secondary)', fontSize: 14, color: 'var(--accent)', flexShrink: 0 }}>📋 {agent.task}</div>
+              <div style={{ padding: '8px 16px', background: 'var(--bg-secondary)', fontSize: 14, color: 'var(--accent)', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span>📋 {agent.task}</span>
+                {agent.realTimeStatus && (
+                  <span style={{
+                    marginLeft: 'auto',
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    background: agent.realTimeStatus.activity === 'working' ? 'rgba(76,175,80,0.2)' :
+                               agent.realTimeStatus.activity === 'thinking' ? 'rgba(255,152,0,0.2)' :
+                               agent.realTimeStatus.activity === 'error' ? 'rgba(244,67,54,0.2)' :
+                               'rgba(158,158,158,0.2)',
+                    color: agent.realTimeStatus.activity === 'working' ? '#4caf50' :
+                           agent.realTimeStatus.activity === 'thinking' ? '#ff9800' :
+                           agent.realTimeStatus.activity === 'error' ? '#f44336' :
+                           '#9e9e9e',
+                    borderRadius: 4,
+                  }}>
+                    {agent.realTimeStatus.detail || agent.realTimeStatus.activity || ''}
+                  </span>
+                )}
+              </div>
               <div ref={el => outputRefs.current[agent.id] = el} onScroll={() => handleScroll(agent.id)}
                 style={{ padding: '12px 16px', fontSize: 12, lineHeight: 1.5, overflowY: 'auto', background: 'var(--bg-primary)', flex: 1 }}>
                 {(agent.history || []).length > 0 ? (

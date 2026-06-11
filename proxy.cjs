@@ -745,6 +745,39 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  // Handle agent status endpoint
+  if (req.url === '/api/agents/status' && req.method === 'GET') {
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/status_manager.py'
+      const result = execSync(`python3 ${scriptPath} refresh`, {
+        encoding: 'utf8', timeout: 10000,
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(result)
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end('{}')
+    }
+    return
+  }
+
+  // Handle single agent status endpoint
+  if (req.url.match(/^\/api\/agents\/[^/]+\/status$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[3]
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/status_manager.py'
+      const result = execSync(`python3 ${scriptPath} get ${agentId}`, {
+        encoding: 'utf8', timeout: 5000,
+      })
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(result)
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end('null')
+    }
+    return
+  }
+
   // Handle agent report endpoint
   if (req.url === '/api/agents/report' && req.method === 'POST') {
     let body = '';
