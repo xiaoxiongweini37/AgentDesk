@@ -619,8 +619,49 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(getAgentList()));
     return;
   }
+  // Handle update agent config
+  if (req.url.match(/^\/api\/agents\/[^/]+$/) && req.method === 'PUT') {
+    const agentId = req.url.split('/')[3];
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const updates = JSON.parse(body);
+        const configPath = path.join(process.env.HOME, '.hermes/agent-orchestrator/config.yaml');
+        
+        // 读取现有配置
+        let config = {};
+        if (fs.existsSync(configPath)) {
+          config = yaml.parse(fs.readFileSync(configPath, 'utf8')) || {};
+        }
+        
+        // 更新Agent配置
+        if (!config.agents) config.agents = {};
+        if (!config.agents[agentId]) config.agents[agentId] = {};
+        
+        const agent = config.agents[agentId];
+        if (updates.name) agent.name = updates.name;
+        if (updates.role) agent.role = updates.role;
+        if (updates.tmux !== undefined) agent.tmux = updates.tmux || null;
+        if (updates.profile !== undefined) agent.profile = updates.profile || null;
+        if (updates.capabilities) agent.capabilities = updates.capabilities;
+        
+        // 写回配置
+        fs.writeFileSync(configPath, yaml.stringify(config, { lineWidth: -1 }), 'utf8');
+        
+        // 重新加载配置
+        Object.assign(appConfig, loadConfig());
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, agent: config.agents[agentId] }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
 
-  // Handle session ID endpoint
   // Handle session ID endpoint
   if (req.url === '/api/session-id') {
     const sessionId = getCurrentSessionId();

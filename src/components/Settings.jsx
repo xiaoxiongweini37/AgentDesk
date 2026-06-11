@@ -4,6 +4,7 @@ import { gsap } from '../utils/animations'
 const API_BASE = 'http://localhost:3001'
 
 export default function Settings({ onClose }) {
+  const [activeTab, setActiveTab] = useState('general')
   const [health, setHealth] = useState({ proxy: null, api: null })
   const [sessionId, setSessionId] = useState(null)
   const [model, setModel] = useState(localStorage.getItem('agentdesk-model') || 'mimo-v2.5-pro')
@@ -96,6 +97,12 @@ export default function Settings({ onClose }) {
     }} />
   )
 
+  const tabs = [
+    { id: 'general', label: '通用', icon: '⚙️' },
+    { id: 'agents', label: 'Agent配置', icon: '🤖' },
+    { id: 'about', label: '关于', icon: 'ℹ️' },
+  ]
+
   return (
     <div style={{
       position: 'fixed',
@@ -109,17 +116,20 @@ export default function Settings({ onClose }) {
       <div style={{
         background: 'var(--bg-card)',
         borderRadius: 'var(--radius)',
-        padding: 24,
-        width: 480,
+        width: 600,
         maxHeight: '80vh',
-        overflowY: 'auto',
+        overflow: 'hidden',
         border: '1px solid var(--border)',
+        display: 'flex',
+        flexDirection: 'column',
       }} onClick={e => e.stopPropagation()}>
+        {/* 标题 */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 24,
+          padding: '16px 20px',
+          borderBottom: '1px solid var(--border)',
         }}>
           <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>⚙️ 设置</h2>
           <button onClick={onClose} style={{
@@ -131,75 +141,355 @@ export default function Settings({ onClose }) {
           }}>✕</button>
         </div>
 
-        {/* 连接状态 */}
-        <Section title="连接状态">
-          <Row>
-            <StatusDot ok={health.proxy} />
-            <span style={{ color: 'var(--text-primary)' }}>代理服务器 (localhost:3001)</span>
-          </Row>
-          <Row>
-            <StatusDot ok={health.api} />
-            <span style={{ color: 'var(--text-primary)' }}>Hermes API (localhost:8642)</span>
-          </Row>
-          <Row>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-              当前会话: {sessionId || '未连接'}
-            </span>
-          </Row>
-          <Row>
-            <button onClick={testConnection} disabled={testing} style={btnStyle}>
-              {testing ? '测试中...' : '🔗 测试连接'}
+        {/* 标签页 */}
+        <div style={{
+          display: 'flex',
+          borderBottom: '1px solid var(--border)',
+          padding: '0 20px',
+        }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '10px 16px',
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === tab.id ? '2px solid var(--accent)' : '2px solid transparent',
+                color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: activeTab === tab.id ? 600 : 400,
+              }}
+            >
+              {tab.icon} {tab.label}
             </button>
-            <button onClick={() => { checkHealth(); fetchSessionId() }} style={btnStyle}>
-              🔄 刷新状态
-            </button>
-          </Row>
-        </Section>
+          ))}
+        </div>
 
-        {/* 模型设置 */}
-        <Section title="模型设置">
-          <Row>
-            <label style={{ color: 'var(--text-secondary)', fontSize: 13, display: 'block', marginBottom: 4 }}>
-              模型名称
-            </label>
-            <select value={model} onChange={handleModelChange} style={selectStyle}>
-              <option value="mimo-v2.5-pro">mimo-v2.5-pro</option>
-              <option value="mimo-v2-flash">mimo-v2-flash</option>
-            </select>
-          </Row>
-        </Section>
-
-        {/* 外观 */}
-        <Section title="外观">
-          <Row>
-            <label style={{ color: 'var(--text-secondary)', fontSize: 13, display: 'block', marginBottom: 4 }}>
-              主题
-            </label>
-            <select value={theme} onChange={handleThemeChange} style={selectStyle}>
-              <option value="dark">深色</option>
-              <option value="light">浅色</option>
-            </select>
-          </Row>
-        </Section>
-
-        {/* 数据管理 */}
-        <Section title="数据管理">
-          <Row>
-            <button onClick={clearLocalMessages} style={{ ...btnStyle, background: '#f44336' }}>
-              🗑️ 清除本地消息
-            </button>
-          </Row>
-        </Section>
-
-        {/* 关于 */}
-        <Section title="关于">
-          <Row>
-            <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-              AgentDesk v0.1.0 — 基于 Hermes Agent 的桌面端智能体应用
-            </span>
-          </Row>
-        </Section>
+        {/* 内容区域 */}
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: 20,
+        }}>
+          {activeTab === 'general' && (
+            <GeneralSettings
+              health={health}
+              sessionId={sessionId}
+              model={model}
+              theme={theme}
+              testing={testing}
+              onTestConnection={testConnection}
+              onRefresh={() => { checkHealth(); fetchSessionId() }}
+              onModelChange={handleModelChange}
+              onThemeChange={handleThemeChange}
+              onClearMessages={clearLocalMessages}
+            />
+          )}
+          {activeTab === 'agents' && <AgentSettings />}
+          {activeTab === 'about' && <AboutSection />}
+        </div>
       </div>
+    </div>
+  )
+}
+
+function GeneralSettings({ health, sessionId, model, theme, testing, onTestConnection, onRefresh, onModelChange, onThemeChange, onClearMessages }) {
+  const StatusDot = ({ ok }) => (
+    <span style={{
+      display: 'inline-block',
+      width: 8,
+      height: 8,
+      borderRadius: '50%',
+      background: ok === null ? 'var(--text-secondary)' : ok ? '#4caf50' : '#f44336',
+      marginRight: 8,
+    }} />
+  )
+
+  return (
+    <div>
+      {/* 连接状态 */}
+      <Section title="连接状态">
+        <Row>
+          <StatusDot ok={health.proxy} />
+          <span style={{ color: 'var(--text-primary)' }}>代理服务器 (localhost:3001)</span>
+        </Row>
+        <Row>
+          <StatusDot ok={health.api} />
+          <span style={{ color: 'var(--text-primary)' }}>Hermes API (localhost:8642)</span>
+        </Row>
+        <Row>
+          <span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            当前会话: {sessionId || '未连接'}
+          </span>
+        </Row>
+        <Row>
+          <button onClick={onTestConnection} disabled={testing} style={btnStyle}>
+            {testing ? '测试中...' : '🔗 测试连接'}
+          </button>
+          <button onClick={onRefresh} style={btnStyle}>
+            🔄 刷新状态
+          </button>
+        </Row>
+      </Section>
+
+      {/* 模型设置 */}
+      <Section title="模型设置">
+        <div>
+          <label style={{ color: 'var(--text-secondary)', fontSize: 13, display: 'block', marginBottom: 4 }}>
+            模型名称
+          </label>
+          <select value={model} onChange={onModelChange} style={selectStyle}>
+            <option value="mimo-v2.5-pro">mimo-v2.5-pro</option>
+            <option value="mimo-v2-flash">mimo-v2-flash</option>
+          </select>
+        </div>
+      </Section>
+
+      {/* 外观 */}
+      <Section title="外观">
+        <div>
+          <label style={{ color: 'var(--text-secondary)', fontSize: 13, display: 'block', marginBottom: 4 }}>
+            主题
+          </label>
+          <select value={theme} onChange={onThemeChange} style={selectStyle}>
+            <option value="dark">深色</option>
+            <option value="light">浅色</option>
+          </select>
+        </div>
+      </Section>
+
+      {/* 数据管理 */}
+      <Section title="数据管理">
+        <button onClick={onClearMessages} style={{ ...btnStyle, background: '#f44336' }}>
+          🗑️ 清除本地消息
+        </button>
+      </Section>
+    </div>
+  )
+}
+
+function AgentSettings() {
+  const [agents, setAgents] = useState([])
+  const [selectedAgent, setSelectedAgent] = useState(null)
+  const [editForm, setEditForm] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchAgents()
+  }, [])
+
+  const fetchAgents = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/agents`)
+      if (res.ok) {
+        const data = await res.json()
+        setAgents(data)
+        if (data.length > 0 && !selectedAgent) {
+          selectAgent(data[0])
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load agents:', err)
+    }
+    setLoading(false)
+  }
+
+  const selectAgent = (agent) => {
+    setSelectedAgent(agent)
+    setEditForm({
+      name: agent.name || '',
+      role: agent.role || '',
+      tmux: agent.tmux || '',
+      profile: agent.profile || '',
+      capabilities: (agent.capabilities || []).join(', '),
+      api_key: '',
+      base_url: '',
+      model: '',
+    })
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const payload = {
+        ...editForm,
+        capabilities: editForm.capabilities.split(',').map(c => c.trim()).filter(Boolean),
+      }
+      const res = await fetch(`${API_BASE}/api/agents/${selectedAgent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        alert('✅ 保存成功！')
+        fetchAgents()
+      } else {
+        alert('❌ 保存失败')
+      }
+    } catch (err) {
+      alert('❌ 保存失败: ' + err.message)
+    }
+    setSaving(false)
+  }
+
+  if (loading) {
+    return <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 20 }}>加载中...</div>
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 16 }}>
+      {/* Agent列表 */}
+      <div style={{
+        width: 160,
+        flexShrink: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+      }}>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>选择Agent</div>
+        {agents.map(agent => (
+          <button
+            key={agent.id}
+            onClick={() => selectAgent(agent)}
+            style={{
+              padding: '8px 12px',
+              background: selectedAgent?.id === agent.id ? 'var(--accent)' : 'var(--bg-secondary)',
+              border: '1px solid var(--border)',
+              borderRadius: 'var(--radius)',
+              color: selectedAgent?.id === agent.id ? 'var(--bg-primary)' : 'var(--text-primary)',
+              cursor: 'pointer',
+              fontSize: 13,
+              textAlign: 'left',
+            }}
+          >
+            {agent.name || agent.id}
+          </button>
+        ))}
+      </div>
+
+      {/* 编辑表单 */}
+      {selectedAgent && (
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>
+            编辑 {selectedAgent.name} ({selectedAgent.id})
+          </div>
+
+          <FormField label="显示名称">
+            <input
+              value={editForm.name}
+              onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+              style={inputStyle}
+            />
+          </FormField>
+
+          <FormField label="角色描述">
+            <input
+              value={editForm.role}
+              onChange={e => setEditForm(prev => ({ ...prev, role: e.target.value }))}
+              style={inputStyle}
+            />
+          </FormField>
+
+          <FormField label="Tmux Session">
+            <input
+              value={editForm.tmux}
+              onChange={e => setEditForm(prev => ({ ...prev, tmux: e.target.value }))}
+              style={inputStyle}
+              placeholder="留空表示主Hermes"
+            />
+          </FormField>
+
+          <FormField label="Profile">
+            <input
+              value={editForm.profile}
+              onChange={e => setEditForm(prev => ({ ...prev, profile: e.target.value }))}
+              style={inputStyle}
+              placeholder="留空表示无独立profile"
+            />
+          </FormField>
+
+          <FormField label="能力列表">
+            <input
+              value={editForm.capabilities}
+              onChange={e => setEditForm(prev => ({ ...prev, capabilities: e.target.value }))}
+              style={inputStyle}
+              placeholder="用逗号分隔，如: coding, ocr_recognition"
+            />
+          </FormField>
+
+          <div style={{
+            marginTop: 16,
+            padding: '12px',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--radius)',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+          }}>
+            💡 API Key 和 Base URL 需要在 config.yaml 中配置，暂不支持UI修改
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <button onClick={handleSave} disabled={saving} style={{
+              ...btnStyle,
+              background: 'var(--accent)',
+              color: 'var(--bg-primary)',
+              fontWeight: 'bold',
+            }}>
+              {saving ? '保存中...' : '💾 保存配置'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function FormField({ label, children }) {
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <label style={{
+        display: 'block',
+        fontSize: 12,
+        color: 'var(--text-secondary)',
+        marginBottom: 4,
+      }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+function AboutSection() {
+  return (
+    <div>
+      <Section title="AgentDesk">
+        <div style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.8 }}>
+          <p>版本: v0.1.0</p>
+          <p>基于 Hermes Agent 的桌面端智能体应用</p>
+          <p>支持多Agent协同工作、任务分配、消息队列、实时状态同步</p>
+        </div>
+      </Section>
+
+      <Section title="技术栈">
+        <div style={{ color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.8 }}>
+          <p>前端: React + Vite + Tauri</p>
+          <p>后端: Node.js (proxy.cjs)</p>
+          <p>Agent: Hermes Agent CLI</p>
+          <p>通信: REST API + WebSocket</p>
+        </div>
+      </Section>
+
+      <Section title="相关链接">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <a href="https://hermes-agent.nousresearch.com/docs" target="_blank" style={{ color: 'var(--accent)', fontSize: 13 }}>
+            📚 Hermes Agent 文档
+          </a>
+        </div>
+      </Section>
     </div>
   )
 }
@@ -248,4 +538,15 @@ const selectStyle = {
   color: 'var(--text-primary)',
   fontSize: 13,
   width: '100%',
+}
+
+const inputStyle = {
+  padding: '8px 12px',
+  border: '1px solid var(--border)',
+  borderRadius: 'var(--radius)',
+  background: 'var(--bg-secondary)',
+  color: 'var(--text-primary)',
+  fontSize: 13,
+  width: '100%',
+  outline: 'none',
 }
