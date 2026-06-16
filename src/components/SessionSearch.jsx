@@ -68,7 +68,7 @@ export default function SessionSearch({ isOpen, onClose, onLoadSession }) {
       className="animate-fade-in"
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(0, 0, 0, 0.6)',
+        background: 'var(--overlay-bg)',
         backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 1000,

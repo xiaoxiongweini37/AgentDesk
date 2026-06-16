@@ -314,7 +314,7 @@ export default function Dashboard() {
 
       {/* 任务创建模态框 */}
       {showTaskModal && (
-        <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowTaskModal(false)}>
+        <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'var(--overlay-bg)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={() => setShowTaskModal(false)}>
           <div className="glass-modal animate-slide-up" style={{ padding: 24, width: 500 }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px', color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>📋 创建任务</h3>
 

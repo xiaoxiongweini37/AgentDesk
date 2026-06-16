@@ -76,7 +76,7 @@ export default function TaskPanel({ isOpen, onClose }) {
   if (!isOpen) return null
 
   return (
-    <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
+    <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'var(--overlay-bg)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
       <div className="glass-modal animate-slide-up" style={{ padding: 24, width: 900, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
         {/* 标题 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -164,7 +164,7 @@ export default function TaskPanel({ isOpen, onClose }) {
 
       {/* 创建任务模态框 */}
       {showCreateModal && (
-        <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={() => setShowCreateModal(false)}>
+        <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'var(--overlay-bg-light)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={() => setShowCreateModal(false)}>
           <div className="glass-modal animate-slide-up" style={{ padding: 24, width: 500 }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px', color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>➕ 创建任务</h3>
 

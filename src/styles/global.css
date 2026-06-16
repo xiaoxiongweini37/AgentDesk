@@ -24,6 +24,10 @@
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   --glass-shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.2);
 
+  /* 遮罩层 */
+  --overlay-bg: rgba(0, 0, 0, 0.6);
+  --overlay-bg-light: rgba(0, 0, 0, 0.5);
+
   /* 过渡 */
   --transition: all 0.2s ease;
   --transition-fast: all 0.12s ease;
@@ -48,6 +52,10 @@
   --glass-border-hover: rgba(0, 0, 0, 0.15);
   --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
   --glass-shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.08);
+
+  /* 遮罩层 */
+  --overlay-bg: rgba(0, 0, 0, 0.4);
+  --overlay-bg-light: rgba(0, 0, 0, 0.3);
 }
 
 /* 浅色主题下的特殊样式 */

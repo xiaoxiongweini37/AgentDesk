@@ -72,7 +72,7 @@ export default function MessagePanel({ isOpen, onClose }) {
       className="animate-fade-in"
       style={{
         position: 'fixed', inset: 0,
-        background: 'rgba(0, 0, 0, 0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        background: 'var(--overlay-bg)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
       }}
       onClick={onClose}
@@ -172,7 +172,7 @@ export default function MessagePanel({ isOpen, onClose }) {
 
       {/* 发送消息模态框 */}
       {showSendModal && (
-        <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={() => setShowSendModal(false)}>
+        <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'var(--overlay-bg-light)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }} onClick={() => setShowSendModal(false)}>
           <div className="glass-modal animate-slide-up" style={{ padding: 24, width: 500 }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px', color: 'var(--text-primary)', fontSize: 16, fontWeight: 600 }}>✉️ 发送消息</h3>
 
