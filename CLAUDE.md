@@ -2,16 +2,29 @@
 
 ## 项目概述
 - **项目名称**: AgentDesk
-- **项目类型**: 基于 Hermes Agent 的桌面端智能体应用
+- **项目定位**: 多 Agent 协作开发平台 - 让你成为指挥者
 - **技术栈**: React + Vite + Tauri (Rust) + GSAP
-- **主要功能**: 对话窗口、任务管理、文件上传、团队看板
+- **主要功能**: 多 Agent 协作、任务编排、消息路由、共享工作区
+
+## 核心理念
+- **你负责决策**：定义需求、审查结果、调整方向
+- **Agent 负责执行**：写代码、测试、部署、调试
+- **团队协作**：多个 Agent 像真实团队一样协作
 
 ## 关键文件
+- **开发计划**: docs/DEVELOPMENT_PLAN.md ⭐ **必读**
 - **前端入口**: src/
 - **Rust 后端**: src-tauri/
 - **代理服务器**: proxy.cjs
+- **CLI 注册表**: cli_registry.cjs
 - **文档**: docs/
 - **配置**: package.json, vite.config.js
+
+## 开发规范
+1. **遵循开发计划** - 所有开发工作按照 docs/DEVELOPMENT_PLAN.md 执行
+2. **更新进度** - 完成任务后更新 DEVELOPMENT_PLAN.md 的进度跟踪部分
+3. **记录变更** - 重大变更记录到 DEVELOPMENT_PLAN.md 的变更日志
+4. **新功能插入** - 如有新功能需求，更新 DEVELOPMENT_PLAN.md 相应章节
 
 ## 工作规则
 
