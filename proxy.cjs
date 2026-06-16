@@ -1257,8 +1257,7 @@ const server = http.createServer((req, res) => {
 
       try {
         if (isWindows) {
-          // Windows: 使用 PowerShell 后台启动
-          // 创建一个启动脚本，避免环境变量过长问题
+          // Windows: 创建启动脚本，用户手动运行
           const scriptDir = path.join(os.homedir(), '.hermes', 'scripts');
           if (!fs.existsSync(scriptDir)) {
             fs.mkdirSync(scriptDir, { recursive: true });
@@ -1270,24 +1269,31 @@ const server = http.createServer((req, res) => {
             .map(([key, value]) => `$env:${key} = "${value}"`)
             .join('\n');
 
-          const scriptContent = `
-# Agent 启动脚本 - ${agentId}
+          const scriptContent = `# Agent 启动脚本 - ${agentId}
+# 生成时间: ${new Date().toLocaleString()}
 ${envScript}
 
 # 启动命令
+Write-Host "启动 ${startInfo.cliName}..."
 ${startInfo.command} ${startInfo.args.join(' ')}
 `;
 
           const scriptPath = path.join(scriptDir, `start_${agentId}_${sessionId}.ps1`);
           fs.writeFileSync(scriptPath, scriptContent);
 
-          // 使用 PowerShell 后台启动
-          const psCommand = `Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "${scriptPath}" -WindowStyle Hidden`;
-
-          execSync(psCommand, { timeout: 10000 });
-          startSuccess = true;
-          startMethod = 'powershell';
-          console.log(`[Agent] ${agentId} 已通过 PowerShell 启动`);
+          // 尝试使用 cmd /c start 启动
+          try {
+            const cmdCommand = `cmd /c start powershell -NoExit -ExecutionPolicy Bypass -File "${scriptPath}"`;
+            execSync(cmdCommand, { timeout: 5000, windowsHide: true });
+            startSuccess = true;
+            startMethod = 'cmd';
+            console.log(`[Agent] ${agentId} 已通过 cmd 启动`);
+          } catch (cmdErr) {
+            // 如果 cmd 启动失败，标记为脚本模式
+            console.log(`[Agent] ${agentId} 启动脚本已创建，请手动运行: ${scriptPath}`);
+            startSuccess = true;
+            startMethod = 'script';
+          }
         } else {
           // Linux/Mac: 使用 tmux
           const envParts = [];
@@ -1341,39 +1347,44 @@ ${startInfo.command} ${startInfo.args.join(' ')}
       } catch (startErr) {
         console.error(`[Agent] 启动失败:`, startErr.message);
 
-        // 回退：只创建会话文件
-        const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
-        if (!fs.existsSync(sessionsDir)) {
-          fs.mkdirSync(sessionsDir, { recursive: true });
+        // 检查是否已经发送了响应
+        if (!res.headersSent) {
+          // 回退：只创建会话文件
+          const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+          if (!fs.existsSync(sessionsDir)) {
+            fs.mkdirSync(sessionsDir, { recursive: true });
+          }
+
+          const sessionFile = path.join(sessionsDir, `session_${sessionId}.json`);
+          const sessionData = {
+            session_id: sessionId,
+            platform: 'agentdesk',
+            agent_id: agentId,
+            agent_config: {
+              name: agent.name,
+              base_url: agent.base_url,
+              model: agent.model,
+            },
+            messages: [],
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          };
+          fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            session_id: sessionId,
+            status: 'session_only',
+            message: `启动失败，已创建会话文件`,
+            error: startErr.message,
+          }));
         }
-
-        const sessionFile = path.join(sessionsDir, `session_${sessionId}.json`);
-        const sessionData = {
-          session_id: sessionId,
-          platform: 'agentdesk',
-          agent_id: agentId,
-          agent_config: {
-            name: agent.name,
-            base_url: agent.base_url,
-            model: agent.model,
-          },
-          messages: [],
-          created_at: Date.now(),
-          updated_at: Date.now(),
-        };
-        fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          session_id: sessionId,
-          status: 'session_only',
-          message: `tmux 启动失败（hermes-agent 可能未安装），已创建会话文件`,
-          error: tmuxErr.message,
-        }));
       }
     } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
+      if (!res.headersSent) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
     }
     return;
   }
