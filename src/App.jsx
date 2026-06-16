@@ -38,6 +38,13 @@ function App() {
     refreshStatus,
   } = useAgentSelector()
 
+  // 调试信息
+  useEffect(() => {
+    console.log('[App] agents:', agents)
+    console.log('[App] selectedAgentId:', selectedAgentId)
+    console.log('[App] agents.length:', agents.length)
+  }, [agents, selectedAgentId])
+
   // 将选中的 Agent 配置传递给 useHermes
   const { sendMessageStream, isLoading, error, streamingText } = useHermes(selectedAgent)
 

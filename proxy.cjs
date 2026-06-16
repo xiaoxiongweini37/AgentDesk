@@ -2,12 +2,18 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { execSync } = require('child_process');
 const { getAvailableCliTypes, getCliConfig, buildStartCommand, isCliAvailable, CLI_REGISTRY } = require('./cli_registry.cjs');
 
 const API_HOST = 'localhost';
 const API_PORT = 8642;
 const PROXY_PORT = 3001;
+
+// 生成 UUID v4
+function generateUUID() {
+  return crypto.randomUUID();
+}
 
 // ===== 会话压缩功能 =====
 
@@ -1203,8 +1209,8 @@ const server = http.createServer((req, res) => {
         }
       }
 
-      // 创建新的 session ID
-      const sessionId = `agent_${agentId}_${Date.now().toString(36)}`;
+      // 创建新的 session ID（使用 UUID 格式，兼容 Claude CLI 等工具）
+      const sessionId = generateUUID();
       const tmuxSessionName = agent.tmux || `agent-${agentId}`;
 
       // 使用 CLI 注册表构建启动命令
