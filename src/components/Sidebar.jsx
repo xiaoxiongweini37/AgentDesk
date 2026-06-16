@@ -54,6 +54,7 @@ export default function Sidebar({
   onOpenMessages,
   onOpenTasks,
   onOpenCollaboration,
+  onOpenDevTools,
 }) {
   const [expanded, setExpanded] = useState(false)
   const [search, setSearch] = useState('')
@@ -454,6 +455,40 @@ export default function Sidebar({
             {expanded && btn.label}
           </button>
         ))}
+
+        {/* 开发者工具按钮 */}
+        <button
+          title="开发者工具"
+          onClick={() => onOpenDevTools?.()}
+          style={{
+            width: expanded ? '100%' : 44,
+            height: 40,
+            border: '1px solid transparent',
+            borderRadius: 'var(--radius-md)',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontSize: expanded ? 14 : 18,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: expanded ? 'flex-start' : 'center',
+            gap: expanded ? 10 : 0,
+            padding: expanded ? '0 12px' : 0,
+            transition: 'var(--transition)',
+            marginTop: 4,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'var(--glass-bg)'
+            e.currentTarget.style.borderColor = 'var(--glass-border)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.borderColor = 'transparent'
+          }}
+        >
+          <span style={{ fontSize: expanded ? 15 : 18 }}>🛠️</span>
+          {expanded && '开发者工具'}
+        </button>
 
         {/* 设置按钮 */}
         <button

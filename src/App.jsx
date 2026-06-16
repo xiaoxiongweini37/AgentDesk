@@ -10,6 +10,7 @@ import SessionSearch from './components/SessionSearch'
 import MessagePanel from './components/MessagePanel'
 import TaskPanel from './components/TaskPanel'
 import CollaborationFlow from './components/CollaborationFlow'
+import DevTools from './components/DevTools'
 import { useHermes } from './hooks/useHermes'
 import { useSessions } from './hooks/useSessions'
 import { useAgentSelector } from './hooks/useAgentSelector'
@@ -18,6 +19,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('chat')
   const [showSettings, setShowSettings] = useState(false)
   const [showContextPanel, setShowContextPanel] = useState(true)
+  const [showDevTools, setShowDevTools] = useState(false)
   const [showSessionSearch, setShowSessionSearch] = useState(false)
   const [showMessagePanel, setShowMessagePanel] = useState(false)
   const [showTaskPanel, setShowTaskPanel] = useState(false)
@@ -169,6 +171,7 @@ function App() {
         onOpenMessages={() => setShowMessagePanel(true)}
         onOpenTasks={() => setShowTaskPanel(true)}
         onOpenCollaboration={() => setShowCollaborationFlow(true)}
+        onOpenDevTools={() => setShowDevTools(true)}
       />
 
       {/* 中间 - 对话区域 */}
@@ -234,6 +237,12 @@ function App() {
       <CollaborationFlow
         isOpen={showCollaborationFlow}
         onClose={() => setShowCollaborationFlow(false)}
+      />
+
+      {/* 开发者工具 */}
+      <DevTools
+        isOpen={showDevTools}
+        onClose={() => setShowDevTools(false)}
       />
     </div>
   )
