@@ -230,7 +230,7 @@ function getSessionSummaryFromDb(sessionId) {
 // Function to get current CLI session ID
 function getCurrentSessionId() {
   try {
-    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const sessionsDir = path.join(os.homedir(), '.hermes', 'sessions');
     const files = fs.readdirSync(sessionsDir)
       .filter(f => f.startsWith('session_') && f.endsWith('.json'))
       .filter(f => !f.includes('api-') && !f.includes('cron_'))
@@ -255,7 +255,7 @@ function getCurrentSessionId() {
 // 从会话文件读取结构化消息
 function getMessagesFromSession(sessionId, limit = 100) {
   try {
-    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const sessionsDir = path.join(os.homedir(), '.hermes', 'sessions');
     const files = fs.readdirSync(sessionsDir)
       .filter(f => f.includes(sessionId) && f.endsWith('.json'));
     
@@ -281,7 +281,7 @@ function getMessagesFromSession(sessionId, limit = 100) {
 // 从 profile 的 sessions 目录读取最新会话
 function getMessagesFromProfile(profileName, limit = 100) {
   try {
-    const sessionsDir = `/home/jinzhong/.hermes/profiles/${profileName}/sessions`;
+    const sessionsDir = path.join(os.homedir(), '.hermes', 'profiles', profileName, 'sessions');
     if (!fs.existsSync(sessionsDir)) return [];
     
     const files = fs.readdirSync(sessionsDir)
@@ -358,7 +358,7 @@ function detectTask(output) {
 // 获取会话列表
 function getSessionList(limit = 20) {
   try {
-    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const sessionsDir = path.join(os.homedir(), '.hermes', 'sessions');
     const files = fs.readdirSync(sessionsDir)
       .filter(f => f.startsWith('session_') && f.endsWith('.json'))
       .filter(f => !f.includes('api-') && !f.includes('cron_'))
@@ -408,7 +408,7 @@ function getSessionList(limit = 20) {
 // 搜索会话（文件回退），支持按 Agent 筛选
 function searchSessions(query, agentId = null) {
   try {
-    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const sessionsDir = path.join(os.homedir(), '.hermes', 'sessions');
     const files = fs.readdirSync(sessionsDir)
       .filter(f => f.startsWith('session_') && f.endsWith('.json'))
       .filter(f => !f.includes('api-') && !f.includes('cron_'));
@@ -477,7 +477,7 @@ function searchSessions(query, agentId = null) {
 // 获取完整会话（包括所有消息）
 function getFullSession(sessionId) {
   try {
-    const sessionsDir = '/home/jinzhong/.hermes/sessions';
+    const sessionsDir = path.join(os.homedir(), '.hermes', 'sessions');
     const files = fs.readdirSync(sessionsDir)
       .filter(f => f.includes(sessionId) && f.endsWith('.json'));
     
@@ -893,7 +893,7 @@ const server = http.createServer((req, res) => {
         // 默认工作目录
         const defaultDir = process.platform === 'win32'
           ? `C:/Users/${process.env.USERNAME}`
-          : `/home/${process.env.USER}`;
+          : os.homedir();
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ path: defaultDir }));
       }
@@ -1068,12 +1068,16 @@ const server = http.createServer((req, res) => {
           });
 
         } catch (error) {
-          sendEvent({ type: 'error', message: error.message });
+          if (!res.headersSent) {
+            sendEvent({ type: 'error', message: error.message });
+          }
           res.end();
         }
       } catch (error) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: error.message }));
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
       }
     });
     return;
