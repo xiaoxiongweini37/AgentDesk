@@ -964,6 +964,121 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Test agent communication (真正的 CLI 测试)
+  if (req.url === '/api/test/agent' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', async () => {
+      try {
+        const { agentId, message, cliType } = JSON.parse(body);
+
+        // 获取 Agent 配置
+        const agents = appConfig.agents || {};
+        const agent = agents[agentId];
+        if (!agent) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Agent not found' }));
+          return;
+        }
+
+        // 构建启动命令
+        const startInfo = buildStartCommand(agent, generateUUID());
+
+        // 设置 SSE 响应头
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        });
+
+        // 发送状态更新
+        const sendEvent = (data) => {
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        sendEvent({ type: 'status', message: `启动 ${startInfo.cliName}...` });
+
+        // 启动 CLI 进程
+        const { spawn } = require('child_process');
+        const isWindows = process.platform === 'win32';
+
+        let process;
+        try {
+          // 构建环境变量
+          const env = { ...process.env, ...startInfo.env };
+
+          // 启动进程
+          process = spawn(startInfo.command, startInfo.args, {
+            env,
+            shell: true,
+            stdio: ['pipe', 'pipe', 'pipe'],
+          });
+
+          sendEvent({ type: 'status', message: `${startInfo.cliName} 进程已启动 (PID: ${process.pid})` });
+
+          // 收集输出
+          let outputBuffer = '';
+          let responseReceived = false;
+
+          process.stdout.on('data', (data) => {
+            const output = data.toString();
+            outputBuffer += output;
+
+            // 发送输出到客户端
+            sendEvent({ type: 'output', content: output });
+
+            // 检查是否收到完整响应（简单判断：包含换行且不是空行）
+            if (output.includes('\n') && output.trim().length > 0) {
+              responseReceived = true;
+            }
+          });
+
+          process.stderr.on('data', (data) => {
+            sendEvent({ type: 'error', content: data.toString() });
+          });
+
+          // 发送消息到 CLI
+          sendEvent({ type: 'status', message: '发送消息...' });
+          process.stdin.write(message + '\n');
+
+          // 等待响应（最多 30 秒）
+          const timeout = setTimeout(() => {
+            if (!responseReceived) {
+              sendEvent({ type: 'status', message: '等待响应超时' });
+              process.kill();
+              res.end();
+            }
+          }, 30000);
+
+          // 等待进程退出或超时
+          process.on('exit', (code) => {
+            clearTimeout(timeout);
+            sendEvent({
+              type: 'complete',
+              exitCode: code,
+              output: outputBuffer,
+            });
+            res.end();
+          });
+
+          process.on('error', (error) => {
+            clearTimeout(timeout);
+            sendEvent({ type: 'error', message: error.message });
+            res.end();
+          });
+
+        } catch (error) {
+          sendEvent({ type: 'error', message: error.message });
+          res.end();
+        }
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: error.message }));
+      }
+    });
+    return;
+  }
+
   // Handle update agent config
   if (req.url.match(/^\/api\/agents\/[^/]+$/) && req.method === 'PUT') {
     const agentId = req.url.split('/')[3];
