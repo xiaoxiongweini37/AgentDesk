@@ -12,7 +12,7 @@ const PROXY_PORT = 3001;
 function searchSessionsFromDb(query, limit = 10) {
   try {
     const scriptPath = path.join(__dirname, 'scripts', 'session_search_api.py');
-    const result = execSync(`python3 ${scriptPath} "${query.replace(/"/g, '\\"')}" ${limit}`, {
+    const result = execSync(`python ${scriptPath} "${query.replace(/"/g, '\\"')}" ${limit}`, {
       encoding: 'utf8',
       timeout: 10000,
     });
@@ -27,7 +27,7 @@ function searchSessionsFromDb(query, limit = 10) {
 function getSessionSummaryFromDb(sessionId) {
   try {
     const scriptPath = path.join(__dirname, 'scripts', 'session_summary_api.py');
-    const result = execSync(`python3 ${scriptPath} "${sessionId}"`, {
+    const result = execSync(`python ${scriptPath} "${sessionId}"`, {
       encoding: 'utf8',
       timeout: 10000,
     });
@@ -324,7 +324,7 @@ function getAgentSessions(agentId, limit = 10) {
   try {
     // 使用独立的 Python 脚本获取 Agent 会话
     const scriptPath = process.env.HOME + '/.hermes/scripts/agent_sessions.py';
-    const result = execSync(`python3 ${scriptPath} ${agentId} null ${limit}`, {
+    const result = execSync(`python ${scriptPath} ${agentId} null ${limit}`, {
       encoding: 'utf8',
       timeout: 10000,
     });
@@ -339,7 +339,7 @@ function getAgentSessions(agentId, limit = 10) {
 function getAgentMessages(agentId) {
   try {
     const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
-    const result = execSync(`python3 ${scriptPath} get ${agentId}`, {
+    const result = execSync(`python ${scriptPath} get ${agentId}`, {
       encoding: 'utf8',
       timeout: 5000,
     });
@@ -353,7 +353,7 @@ function getAgentMessages(agentId) {
 function getAgentTasks(agentId) {
   try {
     const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
-    const result = execSync(`python3 ${scriptPath} list null ${agentId}`, {
+    const result = execSync(`python ${scriptPath} list null ${agentId}`, {
       encoding: 'utf8',
       timeout: 5000,
     });
@@ -610,13 +610,31 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Handle mounts endpoint
+  // Handle get mount context (must be before /api/mounts GET)
+  if (req.url.match(/^\/api\/mounts\/context/) && req.method === 'GET') {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const sessionId = url.searchParams.get('session') || 'default';
+    try {
+      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
+      const result = execSync(`python ${scriptPath} context ${sessionId}`, {
+        encoding: 'utf8', timeout: 10000,
+      });
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end(result);
+    } catch (err) {
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('');
+    }
+    return;
+  }
+
+  // Handle mounts list endpoint
   if (req.url.match(/^\/api\/mounts/) && req.method === 'GET') {
     const url = new URL(req.url, `http://${req.headers.host}`);
     const sessionId = url.searchParams.get('session') || 'default';
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
-      const result = execSync(`python3 ${scriptPath} list ${sessionId}`, {
+      const result = execSync(`python ${scriptPath} list ${sessionId}`, {
         encoding: 'utf8', timeout: 5000,
       });
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -636,7 +654,7 @@ const server = http.createServer((req, res) => {
       try {
         const { session_id, path } = JSON.parse(body);
         const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
-        const result = execSync(`python3 ${scriptPath} add ${session_id} "${path}"`, {
+        const result = execSync(`python ${scriptPath} add ${session_id} "${path}"`, {
           encoding: 'utf8', timeout: 5000,
         });
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -649,24 +667,6 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Handle get mount context
-  if (req.url.match(/^\/api\/mounts\/context/) && req.method === 'GET') {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const sessionId = url.searchParams.get('session') || 'default';
-    try {
-      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
-      const result = execSync(`python3 ${scriptPath} context ${sessionId}`, {
-        encoding: 'utf8', timeout: 10000,
-      });
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end(result);
-    } catch (err) {
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end('');
-    }
-    return;
-  }
-
   // Handle remove mount endpoint
   if (req.url === '/api/mounts' && req.method === 'DELETE') {
     let body = '';
@@ -675,11 +675,76 @@ const server = http.createServer((req, res) => {
       try {
         const { session_id, mount_id } = JSON.parse(body);
         const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/mount_manager.py';
-        const result = execSync(`python3 ${scriptPath} remove ${session_id} ${mount_id}`, {
+        const result = execSync(`python ${scriptPath} remove ${session_id} ${mount_id}`, {
           encoding: 'utf8', timeout: 5000,
         });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(result);
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Handle working directory - GET
+  if (req.url.match(/^\/api\/workdir/) && req.method === 'GET') {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const sessionId = url.searchParams.get('session') || 'default';
+    try {
+      const workdirFile = path.join(process.env.HOME, '.hermes/mounts', `${sessionId}_workdir.json`);
+      if (fs.existsSync(workdirFile)) {
+        const data = JSON.parse(fs.readFileSync(workdirFile, 'utf8'));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
+      } else {
+        // 默认工作目录
+        const defaultDir = process.platform === 'win32'
+          ? `C:/Users/${process.env.USERNAME}`
+          : `/home/${process.env.USER}`;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ path: defaultDir }));
+      }
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Handle working directory - POST (set)
+  if (req.url === '/api/workdir' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { session_id, path: workdirPath } = JSON.parse(body);
+        const absPath = require('path').resolve(workdirPath);
+
+        // 验证目录是否存在
+        if (!fs.existsSync(absPath)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: '目录不存在' }));
+          return;
+        }
+
+        // 验证是否是目录
+        if (!fs.statSync(absPath).isDirectory()) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: '不是目录' }));
+          return;
+        }
+
+        const mountsDir = path.join(process.env.HOME, '.hermes/mounts');
+        if (!fs.existsSync(mountsDir)) fs.mkdirSync(mountsDir, { recursive: true });
+
+        const workdirFile = path.join(mountsDir, `${session_id}_workdir.json`);
+        const data = { path: absPath, updated_at: Date.now() };
+        fs.writeFileSync(workdirFile, JSON.stringify(data, null, 2));
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(data));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
@@ -774,7 +839,7 @@ const server = http.createServer((req, res) => {
       // 按 Agent 筛选：使用独立的 Python 脚本
       const scriptPath = process.env.HOME + '/.hermes/scripts/agent_sessions.py';
       const escapedQuery = query.replace(/"/g, '\\"');
-      const cmd = `python3 ${scriptPath} ${agentId} "${escapedQuery}" 20`;
+      const cmd = `python ${scriptPath} ${agentId} "${escapedQuery}" 20`;
       const result = execSync(cmd, {
         encoding: 'utf8',
         timeout: 10000,
@@ -814,7 +879,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/messages' && req.method === 'GET') {
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
-      const result = execSync(`python3 ${scriptPath} all`, {
+      const result = execSync(`python ${scriptPath} all`, {
         encoding: 'utf8',
         timeout: 5000,
       });
@@ -832,7 +897,7 @@ const server = http.createServer((req, res) => {
     const agentId = req.url.split('/')[3];
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
-      const result = execSync(`python3 ${scriptPath} get ${agentId}`, {
+      const result = execSync(`python ${scriptPath} get ${agentId}`, {
         encoding: 'utf8',
         timeout: 5000,
       });
@@ -854,7 +919,7 @@ const server = http.createServer((req, res) => {
         const msg = JSON.parse(body);
         const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
         const escapedContent = msg.content.replace(/"/g, '\\"');
-        const result = execSync(`python3 ${scriptPath} send ${msg.from} ${msg.to} ${msg.type} "${escapedContent}"`, {
+        const result = execSync(`python ${scriptPath} send ${msg.from} ${msg.to} ${msg.type} "${escapedContent}"`, {
           encoding: 'utf8',
           timeout: 10000,
         });
@@ -872,7 +937,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/tasks' && req.method === 'GET') {
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
-      const result = execSync(`python3 ${scriptPath} list`, {
+      const result = execSync(`python ${scriptPath} list`, {
         encoding: 'utf8',
         timeout: 5000,
       });
@@ -897,7 +962,7 @@ const server = http.createServer((req, res) => {
         const priority = task.priority || 'normal';
         const escapedTitle = task.title.replace(/"/g, '\\"');
         const escapedDesc = (task.description || '').replace(/"/g, '\\"');
-        const result = execSync(`python3 ${scriptPath} create "${escapedTitle}" "${escapedDesc}" ${assigned} ${priority}`, {
+        const result = execSync(`python ${scriptPath} create "${escapedTitle}" "${escapedDesc}" ${assigned} ${priority}`, {
           encoding: 'utf8',
           timeout: 10000,
         });
@@ -908,7 +973,7 @@ const server = http.createServer((req, res) => {
           const msgPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
           const msgContent = `新任务: ${task.title}\n${task.description || ''}`;
           try {
-            execSync(`python3 ${msgPath} send commander ${taskResult.assigned_to} task "${msgContent.replace(/"/g, '\\"')}" ${priority}`, {
+            execSync(`python ${msgPath} send commander ${taskResult.assigned_to} task "${msgContent.replace(/"/g, '\\"')}" ${priority}`, {
               encoding: 'utf8', timeout: 5000,
             });
           } catch (e) {
@@ -931,7 +996,7 @@ const server = http.createServer((req, res) => {
     const agentId = req.url.split('/')[4]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
-      const result = execSync(`python3 ${scriptPath} summary ${agentId}`, {
+      const result = execSync(`python ${scriptPath} summary ${agentId}`, {
         encoding: 'utf8', timeout: 5000,
       })
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -948,7 +1013,7 @@ const server = http.createServer((req, res) => {
     const agentId = req.url.split('/')[4]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
-      const result = execSync(`python3 ${scriptPath} next ${agentId}`, {
+      const result = execSync(`python ${scriptPath} next ${agentId}`, {
         encoding: 'utf8', timeout: 5000,
       })
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -967,7 +1032,7 @@ const server = http.createServer((req, res) => {
     const msgId = parts[5]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
-      execSync(`python3 ${scriptPath} process ${agentId} ${msgId}`, {
+      execSync(`python ${scriptPath} process ${agentId} ${msgId}`, {
         encoding: 'utf8', timeout: 5000,
       })
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -986,7 +1051,7 @@ const server = http.createServer((req, res) => {
     const msgId = parts[4]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py'
-      execSync(`python3 ${scriptPath} mark-read ${agentId} ${msgId}`, { encoding: 'utf8', timeout: 5000 })
+      execSync(`python ${scriptPath} mark-read ${agentId} ${msgId}`, { encoding: 'utf8', timeout: 5000 })
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ success: true }))
     } catch (err) {
@@ -1008,15 +1073,15 @@ const server = http.createServer((req, res) => {
         // 先获取任务，再更新状态
         if (update.status === 'cancelled') {
           // cancelled 直接标记为 completed（简单处理）
-          execSync(`python3 ${scriptPath} complete ${taskId} "cancelled"`, { encoding: 'utf8', timeout: 5000 })
+          execSync(`python ${scriptPath} complete ${taskId} "cancelled"`, { encoding: 'utf8', timeout: 5000 })
         } else if (update.status === 'assigned') {
-          execSync(`python3 ${scriptPath} assign ${taskId} worker`, { encoding: 'utf8', timeout: 5000 })
+          execSync(`python ${scriptPath} assign ${taskId} worker`, { encoding: 'utf8', timeout: 5000 })
         } else if (update.status === 'in_progress') {
-          execSync(`python3 ${scriptPath} start ${taskId}`, { encoding: 'utf8', timeout: 5000 })
+          execSync(`python ${scriptPath} start ${taskId}`, { encoding: 'utf8', timeout: 5000 })
         } else if (update.status === 'completed') {
-          execSync(`python3 ${scriptPath} complete ${taskId}`, { encoding: 'utf8', timeout: 5000 })
+          execSync(`python ${scriptPath} complete ${taskId}`, { encoding: 'utf8', timeout: 5000 })
         } else if (update.status === 'failed') {
-          execSync(`python3 ${scriptPath} complete ${taskId} "failed"`, { encoding: 'utf8', timeout: 5000 })
+          execSync(`python ${scriptPath} complete ${taskId} "failed"`, { encoding: 'utf8', timeout: 5000 })
         }
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ success: true }))
@@ -1032,7 +1097,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/agents/status' && req.method === 'GET') {
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/status_manager.py'
-      const result = execSync(`python3 ${scriptPath} refresh`, {
+      const result = execSync(`python ${scriptPath} refresh`, {
         encoding: 'utf8', timeout: 10000,
       })
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1049,7 +1114,7 @@ const server = http.createServer((req, res) => {
     const agentId = req.url.split('/')[3]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/status_manager.py'
-      const result = execSync(`python3 ${scriptPath} get ${agentId}`, {
+      const result = execSync(`python ${scriptPath} get ${agentId}`, {
         encoding: 'utf8', timeout: 5000,
       })
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1069,7 +1134,7 @@ const server = http.createServer((req, res) => {
       try {
         const report = JSON.parse(body);
         const scriptPath = process.env.HOME + '/.hermes/scripts/agent_report.py';
-        let cmd = `python3 ${scriptPath} ${report.agent} ${report.type}`;
+        let cmd = `python ${scriptPath} ${report.agent} ${report.type}`;
         
         if (report.type === 'result') {
           cmd += ` ${report.task_id || 'null'} "${(report.result || '').replace(/"/g, '\\"')}" ${report.status || 'success'}`;
@@ -1095,7 +1160,7 @@ const server = http.createServer((req, res) => {
     const agentId = req.url.split('/')[4]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py'
-      const result = execSync(`python3 ${scriptPath} queue ${agentId}`, {
+      const result = execSync(`python ${scriptPath} queue ${agentId}`, {
         encoding: 'utf8', timeout: 5000,
       })
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1112,7 +1177,7 @@ const server = http.createServer((req, res) => {
     const agentId = req.url.split('/')[4]
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py'
-      const result = execSync(`python3 ${scriptPath} next ${agentId}`, {
+      const result = execSync(`python ${scriptPath} next ${agentId}`, {
         encoding: 'utf8', timeout: 5000,
       })
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -1128,7 +1193,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/tasks/auto-assign' && req.method === 'POST') {
     try {
       const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
-      const result = execSync(`python3 ${scriptPath} auto-assign`, {
+      const result = execSync(`python ${scriptPath} auto-assign`, {
         encoding: 'utf8',
         timeout: 5000,
       });

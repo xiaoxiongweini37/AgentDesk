@@ -7,9 +7,11 @@ export default function ContextPanel({ sessionId, onClose }) {
   const [activeSection, setActiveSection] = useState('context')
   const [contextData, setContextData] = useState(null)
   const [mounts, setMounts] = useState([])
+  const [workDir, setWorkDir] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showMountModal, setShowMountModal] = useState(false)
   const [showFileBrowser, setShowFileBrowser] = useState(false)
+  const [showWorkDirBrowser, setShowWorkDirBrowser] = useState(false)
   const [browseMode, setBrowseMode] = useState('both')
 
   useEffect(() => {
@@ -24,6 +26,8 @@ export default function ContextPanel({ sessionId, onClose }) {
         }
         const mountRes = await fetch(`${API_BASE}/api/mounts?session=${sessionId}`)
         if (mountRes.ok) setMounts(await mountRes.json())
+        const workdirRes = await fetch(`${API_BASE}/api/workdir?session=${sessionId}`)
+        if (workdirRes.ok) setWorkDir(await workdirRes.json())
       } catch (err) {
         console.error('Failed to fetch context:', err)
       }
@@ -81,6 +85,22 @@ export default function ContextPanel({ sessionId, onClose }) {
       })
       setMounts(prev => prev.filter(m => m.id !== mountId))
     } catch (err) { console.error('Failed to remove mount:', err) }
+  }
+
+  const handleSetWorkDir = async (selectedPath) => {
+    if (!selectedPath) return
+    try {
+      const res = await fetch(`${API_BASE}/api/workdir`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: sessionId, path: selectedPath }),
+      })
+      if (res.ok) {
+        const result = await res.json()
+        if (result.error) alert(result.error)
+        else setWorkDir(result)
+      }
+    } catch (err) { console.error('Failed to set workdir:', err) }
   }
 
   return (
@@ -144,10 +164,12 @@ export default function ContextPanel({ sessionId, onClose }) {
           <ContextContent
             data={contextData}
             mounts={mounts}
+            workDir={workDir}
             onAddMount={() => setShowMountModal(true)}
             onRemoveMount={handleRemoveMount}
             onBrowseFile={() => { setBrowseMode('file'); setShowFileBrowser(true) }}
             onBrowseFolder={() => { setBrowseMode('directory'); setShowFileBrowser(true) }}
+            onChangeWorkDir={() => setShowWorkDirBrowser(true)}
           />
         ) : (
           <ProgressContent data={contextData} />
@@ -160,16 +182,63 @@ export default function ContextPanel({ sessionId, onClose }) {
         onSelect={handleAddMount}
         mode={browseMode}
       />
+
+      <FileBrowser
+        isOpen={showWorkDirBrowser}
+        onClose={() => setShowWorkDirBrowser(false)}
+        onSelect={handleSetWorkDir}
+        mode="directory"
+      />
     </div>
   )
 }
 
-function ContextContent({ data, mounts, onAddMount, onRemoveMount, onBrowseFile, onBrowseFolder }) {
+function ContextContent({ data, mounts, workDir, onAddMount, onRemoveMount, onBrowseFile, onBrowseFolder, onChangeWorkDir }) {
   if (!data) return <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>无数据</div>
 
   return (
     <div>
-      <Section title="挂载文件" icon="📁">
+      {/* 工作目录 */}
+      <Section title="工作目录" icon="📂">
+        <div className="glass-card" style={{
+          padding: '10px 12px',
+          borderRadius: 'var(--radius-sm)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontSize: 12,
+              color: 'var(--text-primary)',
+              fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}>
+              {workDir?.path || data.currentDir}
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 2, opacity: 0.7 }}>
+              Agent 会话的实际工作目录
+            </div>
+          </div>
+          <button
+            onClick={onChangeWorkDir}
+            className="glass-btn-ghost"
+            style={{
+              padding: '4px 8px',
+              fontSize: 11,
+              borderRadius: 'var(--radius-sm)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            切换
+          </button>
+        </div>
+      </Section>
+
+      {/* 挂载文件 */}
+      <Section title="挂载文件" icon="📎" style={{ marginTop: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
           {mounts.map(mount => (
             <div key={mount.id} className="glass-card" style={{
@@ -216,18 +285,6 @@ function ContextContent({ data, mounts, onAddMount, onRemoveMount, onBrowseFile,
         ) : (
           <div style={{ fontSize: 12, color: 'var(--text-secondary)', padding: '8px 0', opacity: 0.6 }}>暂无工具调用记录</div>
         )}
-      </Section>
-
-      <Section title="工作目录" icon="📂" style={{ marginTop: 20 }}>
-        <div className="glass-card" style={{
-          padding: '8px 12px',
-          fontSize: 12,
-          color: 'var(--text-secondary)',
-          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-          borderRadius: 'var(--radius-sm)',
-        }}>
-          {data.currentDir}
-        </div>
       </Section>
     </div>
   )
