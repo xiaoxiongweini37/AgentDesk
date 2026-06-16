@@ -2,9 +2,32 @@ import { useState, useCallback, useEffect } from 'react'
 
 const API_BASE = 'http://localhost:3001'
 const STORAGE_KEY = 'agentdesk_sessions'
+const ACTIVE_SESSION_KEY = 'agentdesk_active_session_id'
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+}
+
+// 从 localStorage 获取保存的活跃 session ID
+function getSavedActiveSessionId() {
+  try {
+    return localStorage.getItem(ACTIVE_SESSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+// 保存活跃 session ID 到 localStorage
+function saveActiveSessionId(sessionId) {
+  try {
+    if (sessionId) {
+      localStorage.setItem(ACTIVE_SESSION_KEY, sessionId)
+    } else {
+      localStorage.removeItem(ACTIVE_SESSION_KEY)
+    }
+  } catch (err) {
+    console.error('保存 session ID 失败:', err)
+  }
 }
 
 // 合并同一天的会话
@@ -58,8 +81,14 @@ function formatDateKey(dateKey) {
 export function useSessions() {
   const [sessions, setSessions] = useState([])
   const [rawSessions, setRawSessions] = useState([])
-  const [activeSessionId, setActiveSessionId] = useState(null)
+  const [activeSessionId, setActiveSessionIdState] = useState(null)
   const [loading, setLoading] = useState(true)
+
+  // 包装 setActiveSessionId，同时保存到 localStorage
+  const setActiveSessionId = useCallback((id) => {
+    setActiveSessionIdState(id)
+    saveActiveSessionId(id)
+  }, [])
 
   // 从代理服务器加载会话列表
   const fetchSessions = useCallback(async () => {
@@ -87,6 +116,23 @@ export function useSessions() {
     fetchSessions()
   }, [fetchSessions])
 
+  // 初始化时恢复保存的活跃 session ID
+  useEffect(() => {
+    if (sessions.length > 0 && !activeSessionId) {
+      const savedId = getSavedActiveSessionId()
+      if (savedId) {
+        // 检查保存的 session 是否存在
+        const sessionExists = sessions.some(s => s.id === savedId)
+        if (sessionExists) {
+          setActiveSessionIdState(savedId)
+          return
+        }
+      }
+      // 如果没有保存的 session 或保存的 session 不存在，使用第一个
+      setActiveSessionIdState(sessions[0].id)
+    }
+  }, [sessions, activeSessionId])
+
   // 本地创建新会话
   const createSession = useCallback(() => {
     const id = generateId()
@@ -101,6 +147,8 @@ export function useSessions() {
     }
     setSessions(prev => [session, ...prev])
     setActiveSessionId(id)
+    // 保存活跃 session ID 到 localStorage（持久化）
+    saveActiveSessionId(id)
     // 保存到 localStorage
     localStorage.setItem(STORAGE_KEY, JSON.stringify([session, ...sessions]))
     return id
@@ -108,7 +156,13 @@ export function useSessions() {
 
   const deleteSession = useCallback((id) => {
     setSessions(prev => prev.filter(s => s.id !== id))
-    setActiveSessionId(prev => prev === id ? null : prev)
+    setActiveSessionIdState(prev => {
+      if (prev === id) {
+        saveActiveSessionId(null)
+        return null
+      }
+      return prev
+    })
   }, [])
 
   const updateSessionMessages = useCallback((id, messages) => {
