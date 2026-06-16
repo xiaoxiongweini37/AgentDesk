@@ -208,7 +208,7 @@ export default function ContextPanel({ sessionId, onClose }) {
             onChangeWorkDir={() => setShowWorkDirBrowser(true)}
           />
         ) : (
-          <ProgressContent data={contextData} />
+          <ProgressContent data={contextData} sessionId={sessionId} />
         )}
       </div>
 
@@ -326,9 +326,51 @@ function ContextContent({ data, mounts, workDir, onAddMount, onRemoveMount, onBr
   )
 }
 
-function ProgressContent({ data }) {
+function ProgressContent({ data, sessionId }) {
   if (!data) return <div style={{ color: 'var(--text-secondary)', fontSize: 13 }}>无数据</div>
   const tokenPercent = Math.min(100, (data.totalTokens / 1000000) * 100)
+  const [compressionInfo, setCompressionInfo] = useState(null)
+  const [compressing, setCompressing] = useState(false)
+
+  // 加载压缩状态
+  useEffect(() => {
+    if (!sessionId) return
+    const fetchCompression = async () => {
+      try {
+        const res = await fetch(`http://localhost:3001/api/sessions/${sessionId}/compression`)
+        if (res.ok) {
+          const info = await res.json()
+          setCompressionInfo(info)
+        }
+      } catch (err) {
+        console.error('获取压缩状态失败:', err)
+      }
+    }
+    fetchCompression()
+  }, [sessionId])
+
+  // 手动压缩
+  const handleCompress = async () => {
+    if (!sessionId || compressing) return
+    setCompressing(true)
+    try {
+      const res = await fetch(`http://localhost:3001/api/sessions/${sessionId}/compress`, {
+        method: 'POST',
+      })
+      const result = await res.json()
+      if (result.compressed) {
+        alert(`✅ 压缩完成！\n消息数: ${result.before} → ${result.after}\n使用率: ${result.usageBefore?.toFixed(1)}% → ${result.usageAfter?.toFixed(1)}%`)
+        // 刷新压缩状态
+        const infoRes = await fetch(`http://localhost:3001/api/sessions/${sessionId}/compression`)
+        if (infoRes.ok) setCompressionInfo(await infoRes.json())
+      } else {
+        alert(`ℹ️ ${result.message || '不需要压缩'}`)
+      }
+    } catch (err) {
+      alert(`❌ 压缩失败: ${err.message}`)
+    }
+    setCompressing(false)
+  }
 
   return (
     <div>
@@ -357,6 +399,42 @@ function ProgressContent({ data }) {
           <div style={{ fontSize: 10, color: 'var(--text-secondary)', marginTop: 4, opacity: 0.7 }}>
             {tokenPercent.toFixed(1)}% of 1M context
           </div>
+        </div>
+
+        {/* 压缩状态和控制 */}
+        <div className="glass-card" style={{ padding: 12, borderRadius: 'var(--radius-sm)', marginTop: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>上下文压缩</span>
+            <button
+              onClick={handleCompress}
+              disabled={compressing}
+              className="glass-btn"
+              style={{ padding: '4px 10px', fontSize: 11 }}
+            >
+              {compressing ? '压缩中...' : '🗜️ 手动压缩'}
+            </button>
+          </div>
+          {compressionInfo ? (
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6 }}>
+              <div>状态: {compressionInfo.compressed ? '✅ 已压缩' : '⏳ 未压缩'}</div>
+              {compressionInfo.compressionCount > 0 && (
+                <div>压缩次数: {compressionInfo.compressionCount}</div>
+              )}
+              {compressionInfo.lastCompressed && (
+                <div>上次压缩: {new Date(compressionInfo.lastCompressed).toLocaleString()}</div>
+              )}
+              <div>压缩阈值: {compressionInfo.threshold}%</div>
+              {tokenPercent > compressionInfo.threshold && (
+                <div style={{ color: 'var(--warning)', marginTop: 4 }}>
+                  ⚠️ 当前使用率 ({tokenPercent.toFixed(1)}%) 已超过阈值，建议压缩
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', opacity: 0.7 }}>
+              加载中...
+            </div>
+          )}
         </div>
       </Section>
 

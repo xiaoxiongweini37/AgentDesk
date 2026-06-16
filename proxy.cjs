@@ -1137,39 +1137,122 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      // Create a new session for this agent
-      const sessionId = `agent_${agentId}_${Date.now().toString(36)}`;
-      const sessionFile = path.join(os.homedir(), '.hermes/sessions', `session_${sessionId}.json`);
-
-      // Ensure sessions directory exists
-      const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
-      if (!fs.existsSync(sessionsDir)) {
-        fs.mkdirSync(sessionsDir, { recursive: true });
+      // 检查是否已有 tmux session 在运行
+      if (agent.tmux) {
+        try {
+          execSync(`tmux has-session -t ${agent.tmux}`, { timeout: 3000 });
+          // session 已存在
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'already_running',
+            message: `Agent ${agentId} 已在 tmux session "${agent.tmux}" 中运行`,
+            tmux: agent.tmux,
+          }));
+          return;
+        } catch (e) {
+          // session 不存在，继续启动
+        }
       }
 
-      // Create session file
-      const sessionData = {
-        session_id: sessionId,
-        platform: 'agentdesk',
-        agent_id: agentId,
-        agent_config: {
-          name: agent.name,
-          base_url: agent.base_url,
-          model: agent.model,
-        },
-        messages: [],
-        created_at: Date.now(),
-        updated_at: Date.now(),
-      };
+      // 创建新的 session ID
+      const sessionId = `agent_${agentId}_${Date.now().toString(36)}`;
+      const tmuxSessionName = agent.tmux || `agent-${agentId}`;
 
-      fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+      // 构建启动命令
+      // 设置环境变量来配置 Agent
+      const envVars = [];
+      if (agent.api_key) envVars.push(`HERMES_API_KEY="${agent.api_key}"`);
+      if (agent.base_url) envVars.push(`HERMES_BASE_URL="${agent.base_url}"`);
+      if (agent.model) envVars.push(`HERMES_MODEL="${agent.model}"`);
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({
-        session_id: sessionId,
-        status: 'started',
-        agent: agentId,
-      }));
+      // 启动命令：使用 hermes-agent CLI
+      const startCommand = [
+        ...envVars,
+        'hermes-agent',
+        '--session-id', sessionId,
+        '--name', agent.name || agentId,
+      ].join(' ');
+
+      // 以 tmux 方式启动
+      const tmuxCommand = agent.tmux
+        ? `tmux new-session -d -s ${tmuxSessionName} "${startCommand}"`
+        : `tmux new-session -d -s ${tmuxSessionName} "${startCommand}"`;
+
+      try {
+        execSync(tmuxCommand, { timeout: 5000 });
+        console.log(`[Agent] ${agentId} 已在 tmux session "${tmuxSessionName}" 中启动`);
+
+        // 等待一下让 Agent 初始化
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 检查是否启动成功
+        let isRunning = false;
+        try {
+          execSync(`tmux has-session -t ${tmuxSessionName}`, { timeout: 3000 });
+          isRunning = true;
+        } catch (e) {
+          isRunning = false;
+        }
+
+        // 更新配置文件中的 tmux session 名称
+        if (!agent.tmux) {
+          const configPath = path.join(os.homedir(), '.hermes/agent-orchestrator/config.yaml');
+          try {
+            const config = yaml.parse(fs.readFileSync(configPath, 'utf8')) || {};
+            if (config.agents && config.agents[agentId]) {
+              config.agents[agentId].tmux = tmuxSessionName;
+              fs.writeFileSync(configPath, yaml.stringify(config, { lineWidth: -1 }), 'utf8');
+              // 重新加载配置
+              Object.assign(appConfig, loadConfig());
+            }
+          } catch (e) {
+            console.error('[Agent] 更新配置文件失败:', e.message);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          session_id: sessionId,
+          tmux: tmuxSessionName,
+          status: isRunning ? 'started' : 'failed',
+          message: isRunning
+            ? `Agent ${agentId} 已在 tmux session "${tmuxSessionName}" 中启动`
+            : `Agent ${agentId} 启动失败，请检查日志`,
+        }));
+      } catch (tmuxErr) {
+        // tmux 启动失败，可能是因为 hermes-agent 命令不存在
+        console.error(`[Agent] tmux 启动失败:`, tmuxErr.message);
+
+        // 回退：只创建会话文件
+        const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+        if (!fs.existsSync(sessionsDir)) {
+          fs.mkdirSync(sessionsDir, { recursive: true });
+        }
+
+        const sessionFile = path.join(sessionsDir, `session_${sessionId}.json`);
+        const sessionData = {
+          session_id: sessionId,
+          platform: 'agentdesk',
+          agent_id: agentId,
+          agent_config: {
+            name: agent.name,
+            base_url: agent.base_url,
+            model: agent.model,
+          },
+          messages: [],
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        };
+        fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          session_id: sessionId,
+          status: 'session_only',
+          message: `tmux 启动失败（hermes-agent 可能未安装），已创建会话文件`,
+          error: tmuxErr.message,
+        }));
+      }
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
@@ -1747,6 +1830,43 @@ const server = http.createServer((req, res) => {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     });
+    return;
+  }
+
+  // Handle compression status endpoint
+  if (req.url.match(/^\/api\/sessions\/[^/]+\/compression$/) && req.method === 'GET') {
+    const sessionId = req.url.split('/')[3];
+    try {
+      const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+      const files = fs.readdirSync(sessionsDir)
+        .filter(f => f.includes(sessionId) && f.endsWith('.json') && !f.includes('request_'));
+
+      if (files.length === 0) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+
+      const sessionFile = path.join(sessionsDir, files[0]);
+      const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+      const messages = data.messages || [];
+      const { totalTokens, usagePercent } = getContextUsage(messages);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        sessionId,
+        messageCount: messages.length,
+        totalTokens,
+        usagePercent: Math.round(usagePercent * 10) / 10,
+        threshold: COMPRESS_THRESHOLD,
+        compressed: data._compressed ? true : false,
+        compressionCount: data._compressionCount || 0,
+        lastCompressed: data._compressed || null,
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
