@@ -38,25 +38,61 @@ export default function ContextPanel({ sessionId, onClose }) {
 
   const analyzeContext = (messages) => {
     const files = new Set()
-    const tools = new Set()
+    const toolCounts = {}
     let currentDir = '/home/jinzhong'
     let totalTokens = 0
+    let firstTimestamp = null
+    let lastTimestamp = null
+
     messages.forEach(msg => {
       const content = msg.content || ''
+
+      // 提取文件路径
       const fileMatches = content.match(/(?:\/mnt\/[^\s"'`]+|\/home\/[^\s"'`]+|~\/[^\s"'`]+)/g)
       if (fileMatches) fileMatches.forEach(f => files.add(f.split('/').pop()))
-      const toolMatch = content.match(/(?:using|calling|executing)\s+(\w+)/i)
-      if (toolMatch) tools.add(toolMatch[1])
-      totalTokens += Math.ceil(content.length / 4)
+
+      // 提取工具调用（统计次数）
+      const toolMatches = content.match(/(?:using|calling|executing)\s+(\w+)/gi)
+      if (toolMatches) {
+        toolMatches.forEach(tc => {
+          const tool = tc.split(/\s+/)[1].toLowerCase()
+          toolCounts[tool] = (toolCounts[tool] || 0) + 1
+        })
+      }
+
+      // 更准确的 token 估算（中文 1 token ≈ 2 字符，英文 1 token ≈ 4 字符）
+      const chineseChars = (content.match(/[一-龥]/g) || []).length
+      const otherChars = content.length - chineseChars
+      totalTokens += Math.ceil(chineseChars / 2 + otherChars / 4)
+
+      // 时间戳
+      if (msg.timestamp) {
+        const ts = new Date(msg.timestamp)
+        if (!firstTimestamp || ts < firstTimestamp) firstTimestamp = ts
+        if (!lastTimestamp || ts > lastTimestamp) lastTimestamp = ts
+      }
     })
+
+    // 计算会话时长（分钟）
+    const durationMinutes = firstTimestamp && lastTimestamp
+      ? Math.round((lastTimestamp - firstTimestamp) / 60000)
+      : 0
+
+    // 工具统计（按调用次数排序）
+    const tools = Object.entries(toolCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, count]) => ({ name, count }))
+
     return {
       files: Array.from(files).slice(0, 20),
-      tools: Array.from(tools),
+      tools,
       currentDir,
       totalTokens,
       messageCount: messages.length,
       userMessages: messages.filter(m => m.role === 'user').length,
       assistantMessages: messages.filter(m => m.role === 'assistant').length,
+      durationMinutes,
+      toolCallsTotal: Object.values(toolCounts).reduce((a, b) => a + b, 0),
     }
   }
 
@@ -279,7 +315,7 @@ function ContextContent({ data, mounts, workDir, onAddMount, onRemoveMount, onBr
                 borderRadius: 20,
                 fontSize: 11,
                 color: 'var(--warning)',
-              }}>{tool}</span>
+              }}>{tool.name} ({tool.count})</span>
             ))}
           </div>
         ) : (
@@ -301,11 +337,11 @@ function ProgressContent({ data }) {
           <StatCard label="总消息" value={data.messageCount} icon="💬" />
           <StatCard label="用户消息" value={data.userMessages} icon="👤" />
           <StatCard label="AI回复" value={data.assistantMessages} icon="🤖" />
-          <StatCard label="关联文件" value={data.files.length} icon="📎" />
+          <StatCard label="会话时长" value={`${data.durationMinutes}分`} icon="⏱️" />
         </div>
       </Section>
 
-      <Section title="Token 使用" icon="⚡" style={{ marginTop: 20 }}>
+      <Section title="Token 使用" icon="⚡" style={{ marginTop: 16 }}>
         <div className="glass-card" style={{ padding: 12, borderRadius: 'var(--radius-sm)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>本次对话</span>
@@ -325,17 +361,42 @@ function ProgressContent({ data }) {
       </Section>
 
       {data.tools.length > 0 && (
-        <Section title="工具使用" icon="🔧" style={{ marginTop: 20 }}>
+        <Section title="工具使用" icon="🔧" style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {data.tools.map((tool, i) => (
               <div key={i} className="glass-card" style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '8px 12px', borderRadius: 'var(--radius-sm)',
               }}>
-                <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{tool}</span>
-                <span style={{ fontSize: 11, color: 'var(--accent-light)', opacity: 0.7 }}>已调用</span>
+                <span style={{ fontSize: 12, color: 'var(--text-primary)' }}>{tool.name}</span>
+                <span style={{ fontSize: 11, color: 'var(--accent-light)', opacity: 0.7 }}>{tool.count} 次</span>
               </div>
             ))}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 8, textAlign: 'center' }}>
+            共 {data.toolCallsTotal} 次调用
+          </div>
+        </Section>
+      )}
+
+      {data.files.length > 0 && (
+        <Section title="关联文件" icon="📎" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {data.files.slice(0, 10).map((file, i) => (
+              <span key={i} style={{
+                padding: '3px 8px',
+                background: 'var(--glass-bg)',
+                border: '1px solid var(--glass-border)',
+                borderRadius: 12,
+                fontSize: 10,
+                color: 'var(--text-secondary)',
+              }}>📄 {file}</span>
+            ))}
+            {data.files.length > 10 && (
+              <span style={{ fontSize: 10, color: 'var(--text-secondary)', opacity: 0.7 }}>
+                +{data.files.length - 10} 更多
+              </span>
+            )}
           </div>
         </Section>
       )}
