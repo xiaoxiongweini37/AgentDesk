@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
-const { getAvailableCliTypes, getCliConfig, buildStartCommand, isCliAvailable, CLI_REGISTRY } = require('./cli_registry');
+const { getAvailableCliTypes, getCliConfig, buildStartCommand, isCliAvailable, CLI_REGISTRY } = require('./cli_registry.cjs');
 
 const API_HOST = 'localhost';
 const API_PORT = 8642;
