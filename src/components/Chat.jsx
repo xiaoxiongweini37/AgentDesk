@@ -124,7 +124,11 @@ function renderInline(text) {
   return parts
 }
 
-export default function Chat({ messages, onSend, onFileUpload, isLoading, streamingText, showContextPanel, onToggleContext }) {
+export default function Chat({
+  messages, onSend, onFileUpload, isLoading, streamingText,
+  showContextPanel, onToggleContext,
+  agents = [], selectedAgentId, selectedAgent, agentStatus = {}, onSelectAgent
+}) {
   const [input, setInput] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
   const [showScrollTop, setShowScrollTop] = useState(false)
@@ -577,6 +581,58 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
               fontSize: 14, color: '#fff', cursor: 'pointer',
             }} title="回到底部">⬇</button>
           )}
+        </div>
+      )}
+
+      {/* Agent 选择栏 */}
+      {agents.length > 0 && (
+        <div style={{
+          padding: '8px 16px',
+          borderTop: '1px solid var(--glass-border)',
+          display: 'flex',
+          gap: 6,
+          alignItems: 'center',
+          background: 'var(--glass-bg)',
+          overflowX: 'auto',
+          flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--text-secondary)', marginRight: 4, whiteSpace: 'nowrap' }}>Agent:</span>
+          {agents.map(agent => {
+            const isSelected = selectedAgentId === agent.id
+            const status = agentStatus[agent.id]
+            const isOnline = status?.status === 'online'
+
+            return (
+              <button
+                key={agent.id}
+                onClick={() => onSelectAgent(agent.id)}
+                className={isSelected ? 'glass-btn-primary' : 'glass-btn'}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 16,
+                  fontSize: 12,
+                  border: isSelected ? 'none' : '1px solid var(--glass-border)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  whiteSpace: 'nowrap',
+                  color: isSelected ? '#fff' : 'var(--text-primary)',
+                  transition: 'var(--transition)',
+                }}
+                title={`${agent.name} - ${agent.role || '无描述'}`}
+              >
+                <span style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  background: isOnline ? 'var(--success)' : 'var(--text-secondary)',
+                  boxShadow: isOnline ? '0 0 6px var(--success)' : 'none',
+                }} />
+                {agent.name || agent.id}
+              </button>
+            )
+          })}
         </div>
       )}
 

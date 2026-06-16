@@ -2,11 +2,20 @@ import { useState, useCallback, useEffect } from 'react'
 
 const API_BASE = 'http://localhost:3001'
 
-export function useHermes() {
+export function useHermes(agentConfig = null) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
   const [sessionId, setSessionId] = useState(null)
   const [streamingText, setStreamingText] = useState('')
+
+  // 从 agentConfig 获取配置，或使用默认值
+  const getApiKey = useCallback(() => {
+    return agentConfig?.api_key || 'hermes-secret-key-2026'
+  }, [agentConfig])
+
+  const getModel = useCallback(() => {
+    return agentConfig?.model || 'mimo-v2.5-pro'
+  }, [agentConfig])
 
   // 启动时获取当前 CLI session ID
   useEffect(() => {
@@ -74,9 +83,9 @@ export function useHermes() {
 
       const headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer hermes-secret-key-2026',
+        'Authorization': `Bearer ${getApiKey()}`,
       }
-      
+
       if (sessionId) {
         headers['X-Hermes-Session-Id'] = sessionId
       }
@@ -85,7 +94,7 @@ export function useHermes() {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          model: 'mimo-v2.5-pro',
+          model: getModel(),
           messages: enhancedMessages,
           stream: true,
         }),
@@ -134,7 +143,7 @@ export function useHermes() {
       setIsLoading(false)
       setStreamingText('')
     }
-  }, [sessionId, getMountContext])
+  }, [sessionId, getMountContext, getApiKey, getModel])
 
   // 非流式发送消息（备用）
   const sendMessage = useCallback(async (messages) => {
@@ -166,9 +175,9 @@ export function useHermes() {
 
       const headers = {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer hermes-secret-key-2026',
+        'Authorization': `Bearer ${getApiKey()}`,
       }
-      
+
       if (sessionId) {
         headers['X-Hermes-Session-Id'] = sessionId
       }
@@ -177,7 +186,7 @@ export function useHermes() {
         method: 'POST',
         headers,
         body: JSON.stringify({
-          model: 'mimo-v2.5-pro',
+          model: getModel(),
           messages: enhancedMessages,
         }),
       })
@@ -194,7 +203,7 @@ export function useHermes() {
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId, getMountContext])
+  }, [sessionId, getMountContext, getApiKey, getModel])
 
   const checkHealth = useCallback(async () => {
     try {

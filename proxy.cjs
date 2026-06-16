@@ -987,6 +987,249 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Test agent connection
+  if (req.url.match(/^\/api\/agents\/[^/]+\/test$/) && req.method === 'POST') {
+    const agentId = req.url.split('/')[3];
+    try {
+      const agents = appConfig.agents || {};
+      const agent = agents[agentId];
+      if (!agent) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Agent not found' }));
+        return;
+      }
+
+      const baseUrl = agent.base_url || 'http://localhost:8642';
+      const apiKey = agent.api_key || 'hermes-secret-key-2026';
+
+      // Test connection by calling /v1/models
+      const testUrl = new URL('/v1/models', baseUrl);
+      const httpModule = testUrl.protocol === 'https:' ? require('https') : require('http');
+
+      const testReq = httpModule.request(testUrl, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${apiKey}` },
+        timeout: 5000,
+      }, (testRes) => {
+        let data = '';
+        testRes.on('data', chunk => data += chunk);
+        testRes.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: testRes.statusCode === 200,
+              message: testRes.statusCode === 200 ? '连接成功' : `HTTP ${testRes.statusCode}`,
+              models: result.data?.length || 0,
+            }));
+          } catch (e) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, message: '响应解析失败' }));
+          }
+        });
+      });
+
+      testReq.on('error', (err) => {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: err.message }));
+      });
+
+      testReq.on('timeout', () => {
+        testReq.destroy();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: '连接超时' }));
+      });
+
+      testReq.end();
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Get agent status
+  if (req.url.match(/^\/api\/agents\/[^/]+\/status$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[3];
+    try {
+      const agents = appConfig.agents || {};
+      const agent = agents[agentId];
+      if (!agent) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Agent not found' }));
+        return;
+      }
+
+      // Check if tmux session exists (if configured)
+      let isOnline = false;
+      let uptime = null;
+
+      if (agent.tmux) {
+        try {
+          execSync(`tmux has-session -t ${agent.tmux}`, { timeout: 3000 });
+          isOnline = true;
+          // Get session uptime
+          const startTime = execSync(`tmux display-message -t ${agent.tmux} -p '#{session_created}'`, {
+            encoding: 'utf8', timeout: 3000,
+          }).trim();
+          if (startTime) {
+            uptime = Math.floor((Date.now() / 1000) - parseInt(startTime));
+          }
+        } catch (e) {
+          isOnline = false;
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        id: agentId,
+        status: isOnline ? 'online' : 'offline',
+        uptime,
+        tmux: agent.tmux || null,
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Start agent (create session with agent config)
+  if (req.url.match(/^\/api\/agents\/[^/]+\/start$/) && req.method === 'POST') {
+    const agentId = req.url.split('/')[3];
+    try {
+      const agents = appConfig.agents || {};
+      const agent = agents[agentId];
+      if (!agent) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Agent not found' }));
+        return;
+      }
+
+      // Create a new session for this agent
+      const sessionId = `agent_${agentId}_${Date.now().toString(36)}`;
+      const sessionFile = path.join(os.homedir(), '.hermes/sessions', `session_${sessionId}.json`);
+
+      // Ensure sessions directory exists
+      const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+      if (!fs.existsSync(sessionsDir)) {
+        fs.mkdirSync(sessionsDir, { recursive: true });
+      }
+
+      // Create session file
+      const sessionData = {
+        session_id: sessionId,
+        platform: 'agentdesk',
+        agent_id: agentId,
+        agent_config: {
+          name: agent.name,
+          base_url: agent.base_url,
+          model: agent.model,
+        },
+        messages: [],
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      };
+
+      fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        session_id: sessionId,
+        status: 'started',
+        agent: agentId,
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Stop agent
+  if (req.url.match(/^\/api\/agents\/[^/]+\/stop$/) && req.method === 'POST') {
+    const agentId = req.url.split('/')[3];
+    try {
+      const agents = appConfig.agents || {};
+      const agent = agents[agentId];
+      if (!agent) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Agent not found' }));
+        return;
+      }
+
+      let stopped = false;
+
+      // Kill tmux session if exists
+      if (agent.tmux) {
+        try {
+          execSync(`tmux kill-session -t ${agent.tmux}`, { timeout: 3000 });
+          stopped = true;
+        } catch (e) {
+          // Session might not exist
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        status: stopped ? 'stopped' : 'not_running',
+        agent: agentId,
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Get agent logs (recent session messages)
+  if (req.url.match(/^\/api\/agents\/[^/]+\/logs$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[3];
+    try {
+      const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+      const agentSessions = [];
+
+      if (fs.existsSync(sessionsDir)) {
+        const files = fs.readdirSync(sessionsDir)
+          .filter(f => f.includes(agentId) && f.endsWith('.json'))
+          .sort((a, b) => {
+            const statA = fs.statSync(path.join(sessionsDir, a));
+            const statB = fs.statSync(path.join(sessionsDir, b));
+            return statB.mtime - statA.mtime;
+          })
+          .slice(0, 5); // Get last 5 sessions
+
+        for (const file of files) {
+          try {
+            const data = JSON.parse(fs.readFileSync(path.join(sessionsDir, file), 'utf8'));
+            const messages = (data.messages || [])
+              .filter(m => m.role === 'user' || m.role === 'assistant')
+              .slice(-10) // Last 10 messages per session
+              .map(m => ({
+                role: m.role,
+                content: (m.content || '').substring(0, 200),
+                timestamp: m.timestamp,
+              }));
+            agentSessions.push({
+              session_id: data.session_id,
+              messages,
+              updated_at: data.updated_at,
+            });
+          } catch (e) {
+            // Skip invalid files
+          }
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ logs: agentSessions }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
   // Handle session ID endpoint
   if (req.url === '/api/session-id') {
     const sessionId = getCurrentSessionId();

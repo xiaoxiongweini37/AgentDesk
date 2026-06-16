@@ -272,6 +272,11 @@ function AgentSettings() {
   const [saving, setSaving] = useState(false)
   const [showKey, setShowKey] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [agentStatus, setAgentStatus] = useState({})
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState(null)
+  const [agentLogs, setAgentLogs] = useState([])
+  const [showLogs, setShowLogs] = useState(false)
 
   useEffect(() => { fetchAgents() }, [])
 
@@ -282,11 +287,28 @@ function AgentSettings() {
         const data = await res.json()
         setAgents(data)
         if (data.length > 0 && !selectedAgent) selectAgent(data[0])
+        // 获取所有 agent 状态
+        fetchAllStatus(data)
       }
     } catch (err) {
       console.error('Failed to load agents:', err)
     }
     setLoading(false)
+  }
+
+  const fetchAllStatus = async (agentList) => {
+    const statuses = {}
+    for (const agent of agentList || agents) {
+      try {
+        const res = await fetch(`${API_BASE}/api/agents/${agent.id}/status`)
+        if (res.ok) {
+          statuses[agent.id] = await res.json()
+        }
+      } catch (err) {
+        statuses[agent.id] = { status: 'unknown' }
+      }
+    }
+    setAgentStatus(statuses)
   }
 
   const selectAgent = (agent) => {
@@ -301,6 +323,7 @@ function AgentSettings() {
       base_url: agent.base_url || '',
       model: agent.model || '',
     })
+    setTestResult(null)
   }
 
   const handleSave = async () => {
@@ -327,6 +350,64 @@ function AgentSettings() {
     setSaving(false)
   }
 
+  const handleTestConnection = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/agents/${selectedAgent.id}/test`, {
+        method: 'POST',
+      })
+      const result = await res.json()
+      setTestResult(result)
+    } catch (err) {
+      setTestResult({ success: false, message: err.message })
+    }
+    setTesting(false)
+  }
+
+  const handleStartAgent = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/agents/${selectedAgent.id}/start`, {
+        method: 'POST',
+      })
+      const result = await res.json()
+      if (result.error) {
+        alert(`❌ 启动失败: ${result.error}`)
+      } else {
+        alert(`✅ Agent 已启动！会话 ID: ${result.session_id}`)
+        fetchAllStatus()
+      }
+    } catch (err) {
+      alert(`❌ 启动失败: ${err.message}`)
+    }
+  }
+
+  const handleStopAgent = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/agents/${selectedAgent.id}/stop`, {
+        method: 'POST',
+      })
+      const result = await res.json()
+      alert(`⏹️ Agent ${result.status === 'stopped' ? '已停止' : '未在运行'}`)
+      fetchAllStatus()
+    } catch (err) {
+      alert(`❌ 停止失败: ${err.message}`)
+    }
+  }
+
+  const handleLoadLogs = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/agents/${selectedAgent.id}/logs`)
+      if (res.ok) {
+        const data = await res.json()
+        setAgentLogs(data.logs || [])
+        setShowLogs(true)
+      }
+    } catch (err) {
+      console.error('加载日志失败:', err)
+    }
+  }
+
   if (loading) {
     return <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 20, fontSize: 13 }}>加载中...</div>
   }
@@ -335,31 +416,123 @@ function AgentSettings() {
     <div style={{ display: 'flex', gap: 16 }}>
       <div style={{ width: 160, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>选择Agent</div>
-        {agents.map(agent => (
-          <button
-            key={agent.id}
-            onClick={() => selectAgent(agent)}
-            style={{
-              padding: '8px 12px',
-              background: selectedAgent?.id === agent.id ? 'var(--glass-bg-hover)' : 'transparent',
-              border: selectedAgent?.id === agent.id ? '1px solid var(--glass-border-hover)' : '1px solid transparent',
-              borderRadius: 'var(--radius-sm)',
-              color: selectedAgent?.id === agent.id ? 'var(--accent-light)' : 'var(--text-primary)',
-              cursor: 'pointer',
-              fontSize: 13,
-              textAlign: 'left',
-              transition: 'var(--transition)',
-            }}
-          >
-            {agent.name || agent.id}
-          </button>
-        ))}
+        {agents.map(agent => {
+          const status = agentStatus[agent.id]
+          const isOnline = status?.status === 'online'
+
+          return (
+            <button
+              key={agent.id}
+              onClick={() => selectAgent(agent)}
+              style={{
+                padding: '8px 12px',
+                background: selectedAgent?.id === agent.id ? 'var(--glass-bg-hover)' : 'transparent',
+                border: selectedAgent?.id === agent.id ? '1px solid var(--glass-border-hover)' : '1px solid transparent',
+                borderRadius: 'var(--radius-sm)',
+                color: selectedAgent?.id === agent.id ? 'var(--accent-light)' : 'var(--text-primary)',
+                cursor: 'pointer',
+                fontSize: 13,
+                textAlign: 'left',
+                transition: 'var(--transition)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+              }}
+            >
+              <span style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: isOnline ? 'var(--success)' : 'var(--text-secondary)',
+                boxShadow: isOnline ? '0 0 6px var(--success)' : 'none',
+                flexShrink: 0,
+              }} />
+              {agent.name || agent.id}
+            </button>
+          )
+        })}
       </div>
 
       {selectedAgent && (
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 16 }}>
-            编辑 {selectedAgent.name} ({selectedAgent.id})
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+              编辑 {selectedAgent.name} ({selectedAgent.id})
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleStartAgent}
+                className="glass-btn"
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  border: '1px solid var(--success)',
+                  color: 'var(--success)',
+                }}
+              >
+                ▶️ 启动
+              </button>
+              <button
+                onClick={handleStopAgent}
+                className="glass-btn"
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  border: '1px solid var(--error)',
+                  color: 'var(--error)',
+                }}
+              >
+                ⏹️ 停止
+              </button>
+              <button
+                onClick={handleLoadLogs}
+                className="glass-btn"
+                style={{ padding: '6px 12px', fontSize: 12 }}
+              >
+                📋 日志
+              </button>
+            </div>
+          </div>
+
+          {/* 状态显示 */}
+          <div className="glass-card" style={{ padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: agentStatus[selectedAgent.id]?.status === 'online' ? 'var(--success)' : 'var(--text-secondary)',
+              boxShadow: agentStatus[selectedAgent.id]?.status === 'online' ? '0 0 8px var(--success)' : 'none',
+            }} />
+            <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
+              状态：{agentStatus[selectedAgent.id]?.status === 'online' ? '🟢 在线' : '🔴 离线'}
+            </span>
+            {agentStatus[selectedAgent.id]?.uptime && (
+              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                运行时间：{Math.floor(agentStatus[selectedAgent.id].uptime / 60)} 分钟
+              </span>
+            )}
+          </div>
+
+          {/* 测试连接 */}
+          <div className="glass-card" style={{ padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button
+                onClick={handleTestConnection}
+                disabled={testing}
+                className="glass-btn"
+                style={{ padding: '6px 14px', fontSize: 13 }}
+              >
+                {testing ? '测试中...' : '🔗 测试连接'}
+              </button>
+              {testResult && (
+                <span style={{
+                  fontSize: 13,
+                  color: testResult.success ? 'var(--success)' : 'var(--error)',
+                }}>
+                  {testResult.success ? `✅ ${testResult.message}` : `❌ ${testResult.message}`}
+                </span>
+              )}
+            </div>
           </div>
 
           <FormField label="显示名称">
@@ -395,6 +568,40 @@ function AgentSettings() {
               {saving ? '保存中...' : '💾 保存配置'}
             </button>
           </div>
+
+          {/* 日志面板 */}
+          {showLogs && (
+            <div className="glass-card" style={{ marginTop: 16, padding: '12px 14px', maxHeight: 300, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>📋 运行日志</span>
+                <button onClick={() => setShowLogs(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 12 }}>✕ 关闭</button>
+              </div>
+              {agentLogs.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)', textAlign: 'center', padding: 12 }}>暂无日志</div>
+              ) : (
+                agentLogs.map((session, i) => (
+                  <div key={i} style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      会话: {session.session_id?.slice(-8) || '未知'}
+                    </div>
+                    {session.messages?.map((msg, j) => (
+                      <div key={j} style={{
+                        fontSize: 12,
+                        padding: '4px 8px',
+                        marginBottom: 2,
+                        borderRadius: 4,
+                        background: msg.role === 'user' ? 'var(--accent-glow)' : 'var(--glass-bg)',
+                        color: 'var(--text-primary)',
+                      }}>
+                        <span style={{ fontWeight: 600 }}>{msg.role === 'user' ? '👤' : '🤖'}</span>{' '}
+                        {msg.content}
+                      </div>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

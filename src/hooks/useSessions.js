@@ -133,17 +133,18 @@ export function useSessions() {
     }
   }, [sessions, activeSessionId])
 
-  // 本地创建新会话
-  const createSession = useCallback(() => {
+  // 本地创建新会话（支持 agentId 参数）
+  const createSession = useCallback((agentId = null) => {
     const id = generateId()
     const session = {
       id,
-      title: '新对话',
+      title: agentId ? `${agentId} 对话` : '新对话',
       messages: [],
       messageCount: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       platform: 'local',
+      agentId: agentId || null, // 关联的 Agent ID
     }
     setSessions(prev => [session, ...prev])
     setActiveSessionId(id)
@@ -233,6 +234,25 @@ export function useSessions() {
 
   const activeSession = sessions.find(s => s.id === activeSessionId) || null
 
+  // 获取指定 Agent 的会话列表
+  const getAgentSessions = useCallback((agentId) => {
+    return sessions.filter(s => s.agentId === agentId)
+  }, [sessions])
+
+  // 获取或创建指定 Agent 的会话
+  const getOrCreateAgentSession = useCallback((agentId) => {
+    // 查找该 Agent 的最新会话
+    const agentSessions = sessions.filter(s => s.agentId === agentId)
+    if (agentSessions.length > 0) {
+      // 返回最新的会话
+      const latestSession = agentSessions.sort((a, b) => b.updatedAt - a.updatedAt)[0]
+      setActiveSessionId(latestSession.id)
+      return latestSession.id
+    }
+    // 如果没有，创建一个新的
+    return createSession(agentId)
+  }, [sessions, createSession])
+
   return {
     sessions,
     activeSession,
@@ -244,6 +264,8 @@ export function useSessions() {
     renameSession,
     refreshSessions,
     loadSessionMessages,
+    getAgentSessions,
+    getOrCreateAgentSession,
     loading,
   }
 }

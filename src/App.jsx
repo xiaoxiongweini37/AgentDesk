@@ -12,6 +12,7 @@ import TaskPanel from './components/TaskPanel'
 import CollaborationFlow from './components/CollaborationFlow'
 import { useHermes } from './hooks/useHermes'
 import { useSessions } from './hooks/useSessions'
+import { useAgentSelector } from './hooks/useAgentSelector'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
@@ -21,7 +22,24 @@ function App() {
   const [showMessagePanel, setShowMessagePanel] = useState(false)
   const [showTaskPanel, setShowTaskPanel] = useState(false)
   const [showCollaborationFlow, setShowCollaborationFlow] = useState(false)
-  const { sendMessageStream, isLoading, error, streamingText } = useHermes()
+
+  // Agent 选择器
+  const {
+    agents,
+    selectedAgentId,
+    selectedAgent,
+    agentStatus,
+    selectAgent,
+    testConnection,
+    startAgent,
+    stopAgent,
+    getAgentLogs,
+    refreshAgents,
+    refreshStatus,
+  } = useAgentSelector()
+
+  // 将选中的 Agent 配置传递给 useHermes
+  const { sendMessageStream, isLoading, error, streamingText } = useHermes(selectedAgent)
 
   const {
     sessions,
@@ -34,6 +52,7 @@ function App() {
     renameSession,
     refreshSessions,
     loadSessionMessages,
+    getOrCreateAgentSession,
     loading,
   } = useSessions()
 
@@ -57,6 +76,15 @@ function App() {
       setActiveSessionId(sessions[0].id)
     }
   }, [sessions.length, activeSessionId])
+
+  // 切换 Agent 时自动切换到该 Agent 的会话
+  const handleSelectAgent = useCallback((agentId) => {
+    selectAgent(agentId)
+    // 获取或创建该 Agent 的会话
+    if (agentId) {
+      getOrCreateAgentSession(agentId)
+    }
+  }, [selectAgent, getOrCreateAgentSession])
 
   const handleSendMessage = async (msg) => {
     // 确保有活跃会话
@@ -154,6 +182,11 @@ function App() {
             streamingText={streamingText}
             showContextPanel={showContextPanel}
             onToggleContext={() => setShowContextPanel(v => !v)}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            selectedAgent={selectedAgent}
+            agentStatus={agentStatus}
+            onSelectAgent={handleSelectAgent}
           />
         )}
         {activeTab === 'tasks' && <TaskList />}
