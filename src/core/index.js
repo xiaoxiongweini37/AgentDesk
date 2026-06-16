@@ -4,3 +4,4 @@
 
 export { MessageBus, getMessageBus, createMessage, MessageType, MessagePriority } from './MessageBus.js'
 export { AgentAdapter, AgentStatus, AgentCapability } from './AgentAdapter.js'
+export { SharedWorkspace, createSharedWorkspace } from './SharedWorkspace.js'
