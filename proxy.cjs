@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
+const { getAvailableCliTypes, getCliConfig, buildStartCommand, isCliAvailable, CLI_REGISTRY } = require('./cli_registry');
 
 const API_HOST = 'localhost';
 const API_PORT = 8642;
@@ -646,6 +647,8 @@ function getAgentList() {
     id,
     name: config.name || id,
     role: config.role || '',
+    cli_type: config.cli_type || 'hermes',
+    cli_config: config.cli_config || {},
     tmux: config.tmux || null,
     profile: config.profile || null,
     capabilities: config.capabilities || [],
@@ -941,6 +944,20 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify(getAgentList()));
     return;
   }
+
+  // Handle CLI types endpoint
+  if (req.url === '/api/cli-types' && req.method === 'GET') {
+    const cliTypes = getAvailableCliTypes();
+    // 检查每个 CLI 是否可用
+    const result = cliTypes.map(cli => ({
+      ...cli,
+      available: isCliAvailable(cli.id),
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+    return;
+  }
+
   // Handle update agent config
   if (req.url.match(/^\/api\/agents\/[^/]+$/) && req.method === 'PUT') {
     const agentId = req.url.split('/')[3];
@@ -964,6 +981,8 @@ const server = http.createServer((req, res) => {
         const agent = config.agents[agentId];
         if (updates.name) agent.name = updates.name;
         if (updates.role) agent.role = updates.role;
+        if (updates.cli_type !== undefined) agent.cli_type = updates.cli_type || 'hermes';
+        if (updates.cli_config !== undefined) agent.cli_config = updates.cli_config || {};
         if (updates.tmux !== undefined) agent.tmux = updates.tmux || null;
         if (updates.profile !== undefined) agent.profile = updates.profile || null;
         if (updates.capabilities) agent.capabilities = updates.capabilities;
@@ -1158,25 +1177,62 @@ const server = http.createServer((req, res) => {
       const sessionId = `agent_${agentId}_${Date.now().toString(36)}`;
       const tmuxSessionName = agent.tmux || `agent-${agentId}`;
 
-      // 构建启动命令
-      // 设置环境变量来配置 Agent
-      const envVars = [];
-      if (agent.api_key) envVars.push(`HERMES_API_KEY="${agent.api_key}"`);
-      if (agent.base_url) envVars.push(`HERMES_BASE_URL="${agent.base_url}"`);
-      if (agent.model) envVars.push(`HERMES_MODEL="${agent.model}"`);
+      // 使用 CLI 注册表构建启动命令
+      const startInfo = buildStartCommand(agent, sessionId);
+      console.log(`[Agent] 启动 ${agentId}，CLI: ${startInfo.cliName} (${startInfo.cliType})`);
+      console.log(`[Agent] 命令: ${startInfo.fullCommand}`);
 
-      // 启动命令：使用 hermes-agent CLI
-      const startCommand = [
-        ...envVars,
-        'hermes-agent',
-        '--session-id', sessionId,
-        '--name', agent.name || agentId,
-      ].join(' ');
+      // 检查 CLI 是否可用
+      if (!isCliAvailable(startInfo.cliType)) {
+        // CLI 不可用，回退到会话文件模式
+        console.warn(`[Agent] CLI ${startInfo.cliType} 不可用，回退到会话文件模式`);
+
+        const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+        if (!fs.existsSync(sessionsDir)) {
+          fs.mkdirSync(sessionsDir, { recursive: true });
+        }
+
+        const sessionFile = path.join(sessionsDir, `session_${sessionId}.json`);
+        const sessionData = {
+          session_id: sessionId,
+          platform: 'agentdesk',
+          agent_id: agentId,
+          cli_type: startInfo.cliType,
+          agent_config: {
+            name: agent.name,
+            base_url: agent.base_url,
+            model: agent.model,
+          },
+          messages: [],
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        };
+        fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          session_id: sessionId,
+          status: 'session_only',
+          cli_type: startInfo.cliType,
+          cli_name: startInfo.cliName,
+          message: `${startInfo.cliName} 未安装，已创建会话文件`,
+        }));
+        return;
+      }
 
       // 以 tmux 方式启动
-      const tmuxCommand = agent.tmux
-        ? `tmux new-session -d -s ${tmuxSessionName} "${startCommand}"`
-        : `tmux new-session -d -s ${tmuxSessionName} "${startCommand}"`;
+      // 构建带环境变量的启动命令
+      const envParts = [];
+      for (const [key, value] of Object.entries(startInfo.env)) {
+        if (value && key !== 'PATH' && !key.startsWith('_')) {
+          envParts.push(`${key}="${value}"`);
+        }
+      }
+      const fullCommand = envParts.length > 0
+        ? `${envParts.join(' ')} ${startInfo.fullCommand}`
+        : startInfo.fullCommand;
+
+      const tmuxCommand = `tmux new-session -d -s ${tmuxSessionName} "${fullCommand}"`;
 
       try {
         execSync(tmuxCommand, { timeout: 5000 });
@@ -1214,13 +1270,16 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({
           session_id: sessionId,
           tmux: tmuxSessionName,
+          cli_type: startInfo.cliType,
+          cli_name: startInfo.cliName,
+          cli_icon: startInfo.cliIcon,
           status: isRunning ? 'started' : 'failed',
           message: isRunning
-            ? `Agent ${agentId} 已在 tmux session "${tmuxSessionName}" 中启动`
-            : `Agent ${agentId} 启动失败，请检查日志`,
+            ? `${startInfo.cliIcon} ${startInfo.cliName} 已在 tmux session "${tmuxSessionName}" 中启动`
+            : `${startInfo.cliName} 启动失败，请检查日志`,
         }));
       } catch (tmuxErr) {
-        // tmux 启动失败，可能是因为 hermes-agent 命令不存在
+        // tmux 启动失败
         console.error(`[Agent] tmux 启动失败:`, tmuxErr.message);
 
         // 回退：只创建会话文件

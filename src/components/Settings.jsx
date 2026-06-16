@@ -277,8 +277,12 @@ function AgentSettings() {
   const [testResult, setTestResult] = useState(null)
   const [agentLogs, setAgentLogs] = useState([])
   const [showLogs, setShowLogs] = useState(false)
+  const [cliTypes, setCliTypes] = useState([])
 
-  useEffect(() => { fetchAgents() }, [])
+  useEffect(() => {
+    fetchAgents()
+    fetchCliTypes()
+  }, [])
 
   const fetchAgents = async () => {
     try {
@@ -294,6 +298,18 @@ function AgentSettings() {
       console.error('Failed to load agents:', err)
     }
     setLoading(false)
+  }
+
+  const fetchCliTypes = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/cli-types`)
+      if (res.ok) {
+        const data = await res.json()
+        setCliTypes(data)
+      }
+    } catch (err) {
+      console.error('Failed to load CLI types:', err)
+    }
   }
 
   const fetchAllStatus = async (agentList) => {
@@ -316,6 +332,8 @@ function AgentSettings() {
     setEditForm({
       name: agent.name || '',
       role: agent.role || '',
+      cli_type: agent.cli_type || 'hermes',
+      cli_config: agent.cli_config || {},
       tmux: agent.tmux || '',
       profile: agent.profile || '',
       capabilities: (agent.capabilities || []).join(', '),
@@ -549,6 +567,32 @@ function AgentSettings() {
               💡 测试连接验证 API Key 和 Base URL 是否有效，能否成功连接到 API 服务
             </div>
           </div>
+
+          {/* CLI 类型选择 */}
+          <FormField label="CLI 类型">
+            <select
+              value={editForm.cli_type || 'hermes'}
+              onChange={e => setEditForm(prev => ({ ...prev, cli_type: e.target.value }))}
+              className="glass-input"
+              style={{ width: '100%', padding: '8px 12px' }}
+            >
+              {cliTypes.map(cli => (
+                <option key={cli.id} value={cli.id}>
+                  {cli.icon} {cli.name} - {cli.description} {!cli.available && '(未安装)'}
+                </option>
+              ))}
+            </select>
+            {cliTypes.find(c => c.id === (editForm.cli_type || 'hermes')) && (
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>
+                {(() => {
+                  const selectedCli = cliTypes.find(c => c.id === (editForm.cli_type || 'hermes'))
+                  return selectedCli?.available
+                    ? `✅ ${selectedCli.name} 已安装`
+                    : `⚠️ ${selectedCli?.name || '未知'} 未安装，启动时将回退到会话文件模式`
+                })()}
+              </div>
+            )}
+          </FormField>
 
           <FormField label="显示名称">
             <input value={editForm.name} onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))} className="glass-input" style={{ width: '100%' }} />
