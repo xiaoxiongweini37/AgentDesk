@@ -1019,10 +1019,13 @@ const server = http.createServer((req, res) => {
           // 收集输出
           let outputBuffer = '';
           let responseReceived = false;
+          let lastOutputTime = Date.now();
+          let responseComplete = false;
 
           process.stdout.on('data', (data) => {
             const output = data.toString();
             outputBuffer += output;
+            lastOutputTime = Date.now();
 
             // 发送输出到客户端
             sendEvent({ type: 'output', content: output });
@@ -1050,18 +1053,45 @@ const server = http.createServer((req, res) => {
             }
           }, 30000);
 
-          // 等待进程退出或超时
+          // 检测响应完成（2 秒无新输出）
+          const checkComplete = setInterval(() => {
+            if (responseReceived && !responseComplete) {
+              const timeSinceLastOutput = Date.now() - lastOutputTime;
+              if (timeSinceLastOutput > 2000) {
+                // 2 秒无新输出，认为响应完成
+                responseComplete = true;
+                clearInterval(checkComplete);
+                clearTimeout(timeout);
+
+                sendEvent({
+                  type: 'complete',
+                  exitCode: 0,
+                  output: outputBuffer,
+                });
+
+                // 关闭进程
+                process.kill();
+                res.end();
+              }
+            }
+          }, 500);
+
+          // 等待进程退出
           process.on('exit', (code) => {
+            clearInterval(checkComplete);
             clearTimeout(timeout);
-            sendEvent({
-              type: 'complete',
-              exitCode: code,
-              output: outputBuffer,
-            });
-            res.end();
+            if (!responseComplete) {
+              sendEvent({
+                type: 'complete',
+                exitCode: code,
+                output: outputBuffer,
+              });
+              res.end();
+            }
           });
 
           process.on('error', (error) => {
+            clearInterval(checkComplete);
             clearTimeout(timeout);
             sendEvent({ type: 'error', message: error.message });
             res.end();
