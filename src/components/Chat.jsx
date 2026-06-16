@@ -581,13 +581,13 @@ export default function Chat({ messages, onSend, onFileUpload, isLoading, stream
       )}
 
       {/* 输入区域 */}
-      <form onSubmit={handleSubmit} style={{
+      <form onSubmit={handleSubmit} className="chat-input-area" style={{
         padding: '14px 20px',
         borderTop: '1px solid var(--glass-border)',
         display: 'flex',
         gap: 10,
         alignItems: 'center',
-        background: 'rgba(15, 15, 26, 0.6)',
+        background: 'var(--glass-bg)',
         backdropFilter: 'blur(24px)',
         WebkitBackdropFilter: 'blur(24px)',
       }}>
