@@ -12,33 +12,16 @@ export default function TaskList() {
 
   const addTask = () => {
     if (newTask.trim()) {
-      setTasks(prev => [...prev, {
-        id: Date.now(),
-        title: newTask.trim(),
-        status: 'pending',
-        priority: 'medium',
-      }])
+      setTasks(prev => [...prev, { id: Date.now(), title: newTask.trim(), status: 'pending', priority: 'medium' }])
       setNewTask('')
     }
   }
 
   const toggleStatus = (e, id) => {
-    // 点击动画
-    gsap.to(e.currentTarget, {
-      scale: 0.9,
-      duration: 0.1,
-      ease: 'power2.inOut',
-      yoyo: true,
-      repeat: 1,
-    })
-    
+    gsap.to(e.currentTarget, { scale: 0.9, duration: 0.1, ease: 'power2.inOut', yoyo: true, repeat: 1 })
     setTasks(prev => prev.map(t => {
       if (t.id === id) {
-        const nextStatus = {
-          pending: 'in_progress',
-          in_progress: 'completed',
-          completed: 'pending',
-        }
+        const nextStatus = { pending: 'in_progress', in_progress: 'completed', completed: 'pending' }
         return { ...t, status: nextStatus[t.status] }
       }
       return t
@@ -47,27 +30,8 @@ export default function TaskList() {
 
   const deleteTask = (e, id) => {
     gsap.to(e.currentTarget.closest('.task-item'), {
-      x: 50,
-      opacity: 0,
-      duration: 0.3,
-      ease: 'power2.in',
-      onComplete: () => setTasks(prev => prev.filter(t => t.id !== id))
-    })
-  }
-
-  const handleItemHover = (e) => {
-    gsap.to(e.currentTarget, {
-      x: 4,
-      borderColor: 'var(--accent)',
-      duration: 0.2,
-    })
-  }
-
-  const handleItemLeave = (e) => {
-    gsap.to(e.currentTarget, {
-      x: 0,
-      borderColor: 'var(--border)',
-      duration: 0.2,
+      x: 50, opacity: 0, duration: 0.3, ease: 'power2.in',
+      onComplete: () => setTasks(prev => prev.filter(t => t.id !== id)),
     })
   }
 
@@ -84,75 +48,46 @@ export default function TaskList() {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 800, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 20, color: 'var(--text-primary)' }}>📋 任务列表</h2>
+    <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
+      <h2 style={{ marginBottom: 20, color: 'var(--text-primary)', fontSize: 20, fontWeight: 600 }}>📋 任务列表</h2>
 
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
         <input
           value={newTask}
           onChange={(e) => setNewTask(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addTask()}
           placeholder="添加新任务..."
-          style={{
-            flex: 1,
-            padding: '12px 16px',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
-            background: 'var(--bg-secondary)',
-            color: 'var(--text-primary)',
-            fontSize: 14,
-            outline: 'none',
-          }}
+          className="glass-input"
+          style={{ flex: 1, padding: '12px 16px', fontSize: 14 }}
         />
         <button
           onClick={addTask}
-          onMouseEnter={(e) => gsap.to(e.currentTarget, { scale: 1.05, duration: 0.2 })}
-          onMouseLeave={(e) => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
-          style={{
-            padding: '8px 20px',
-            border: 'none',
-            borderRadius: 'var(--radius)',
-            background: 'var(--accent)',
-            color: 'var(--bg-primary)',
-            cursor: 'pointer',
-            fontWeight: 'bold',
-          }}
-        >
-          添加
-        </button>
+          className="glass-btn-primary"
+          style={{ padding: '10px 24px', border: 'none', borderRadius: 'var(--radius-md)', cursor: 'pointer', fontWeight: 600, fontSize: 14, color: '#fff' }}
+        >添加</button>
       </div>
 
-      <div ref={listRef} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div ref={listRef} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {tasks.map(task => (
           <div
             key={task.id}
-            className="task-item"
-            onMouseEnter={handleItemHover}
-            onMouseLeave={handleItemLeave}
+            className="task-item glass-card animate-fade-in"
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '12px 16px',
-              background: 'var(--bg-card)',
-              borderRadius: 'var(--radius)',
-              border: '1px solid var(--border)',
+              display: 'flex', alignItems: 'center', gap: 12,
+              padding: '14px 16px', borderRadius: 'var(--radius-md)',
+              cursor: 'default',
             }}
           >
             <button
               onClick={(e) => toggleStatus(e, task.id)}
               style={{
-                width: 24,
-                height: 24,
-                borderRadius: '50%',
+                width: 26, height: 26, borderRadius: '50%',
                 border: `2px solid ${statusColors[task.status]}`,
                 background: task.status === 'completed' ? statusColors[task.status] : 'transparent',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--bg-primary)',
-                fontSize: 12,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: '#fff', fontSize: 12, flexShrink: 0,
+                transition: 'var(--transition)',
+                boxShadow: task.status === 'completed' ? `0 0 8px ${statusColors[task.status]}` : 'none',
               }}
             >
               {task.status === 'completed' && '✓'}
@@ -162,33 +97,24 @@ export default function TaskList() {
               flex: 1,
               textDecoration: task.status === 'completed' ? 'line-through' : 'none',
               color: task.status === 'completed' ? 'var(--text-secondary)' : 'var(--text-primary)',
+              fontSize: 14,
             }}>
               {task.title}
             </span>
 
             <span style={{
-              fontSize: 12,
-              padding: '2px 8px',
-              borderRadius: 4,
-              background: 'var(--bg-secondary)',
+              fontSize: 11, padding: '3px 10px', borderRadius: 20,
+              background: 'var(--glass-bg)',
               color: statusColors[task.status],
+              border: '1px solid var(--glass-border)',
             }}>
               {statusLabels[task.status]}
             </span>
 
             <button
               onClick={(e) => deleteTask(e, task.id)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 16,
-                padding: '4px',
-              }}
-            >
-              ✕
-            </button>
+              style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, padding: '4px 8px', borderRadius: 6 }}
+            >✕</button>
           </div>
         ))}
       </div>

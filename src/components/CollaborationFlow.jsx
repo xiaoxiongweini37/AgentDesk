@@ -17,7 +17,6 @@ export default function CollaborationFlow({ isOpen, onClose }) {
   const [loading, setLoading] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState(null)
 
-  // 加载数据
   const fetchData = async () => {
     setLoading(true)
     try {
@@ -25,25 +24,17 @@ export default function CollaborationFlow({ isOpen, onClose }) {
         fetch(`${API_BASE}/api/messages`),
         fetch(`${API_BASE}/api/tasks`),
       ])
-      const msgData = await msgRes.json()
-      const taskData = await taskRes.json()
-      setMessages(msgData)
-      setTasks(taskData)
-    } catch (err) {
-      console.error('加载数据失败:', err)
-    }
+      setMessages(await msgRes.json())
+      setTasks(await taskRes.json())
+    } catch (err) { console.error('加载数据失败:', err) }
     setLoading(false)
   }
 
-  useEffect(() => {
-    if (isOpen) fetchData()
-  }, [isOpen])
+  useEffect(() => { if (isOpen) fetchData() }, [isOpen])
 
-  // 获取Agent状态
   const getAgentStatus = (agentId) => {
     const agentTasks = tasks.filter(t => t.assigned_to === agentId)
     const agentMsgs = messages.filter(m => m.to === agentId && !m.read)
-    
     return {
       tasks: agentTasks.length,
       activeTasks: agentTasks.filter(t => t.status === 'in_progress').length,
@@ -51,118 +42,47 @@ export default function CollaborationFlow({ isOpen, onClose }) {
     }
   }
 
-  // 获取连线（消息流）
   const getConnections = () => {
     const connections = []
-    
-    // 基于最近的消息创建连线
-    const recentMsgs = messages.slice(-20)
-    recentMsgs.forEach(msg => {
+    messages.slice(-20).forEach(msg => {
       const from = AGENTS.find(a => a.id === msg.from)
       const to = AGENTS.find(a => a.id === msg.to)
-      
       if (from && to) {
         connections.push({
-          from: from,
-          to: to,
-          type: msg.type,
+          from, to, type: msg.type,
           color: msg.type === 'task' ? '#ff9800' : msg.type === 'error' ? '#f44336' : '#4caf50',
         })
       }
     })
-    
     return connections
   }
 
   if (!isOpen) return null
-
   const connections = getConnections()
 
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: 'rgba(0,0,0,0.5)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      zIndex: 1000,
-    }} onClick={onClose}>
-      <div style={{
-        background: 'var(--bg-card)',
-        borderRadius: 'var(--radius)',
-        padding: 24,
-        width: 900,
-        height: 600,
-        overflow: 'hidden',
-        border: '1px solid var(--border)',
-        display: 'flex',
-        flexDirection: 'column',
-      }} onClick={e => e.stopPropagation()}>
+    <div className="animate-fade-in" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={onClose}>
+      <div className="glass-modal animate-slide-up" style={{ padding: 24, width: 900, height: 600, overflow: 'hidden', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
         {/* 标题 */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-        }}>
-          <h2 style={{ margin: 0, color: 'var(--text-primary)' }}>🔄 协作流程可视化</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 17, fontWeight: 600 }}>🔄 协作流程可视化</h2>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={fetchData} style={{
-              padding: '8px 16px',
-              background: 'var(--accent)',
-              border: 'none',
-              borderRadius: 'var(--radius)',
-              color: 'var(--bg-primary)',
-              cursor: 'pointer',
-              fontWeight: 'bold',
-            }}>
-              🔄 刷新
-            </button>
-            <button onClick={onClose} style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-secondary)',
-              fontSize: 20,
-              cursor: 'pointer',
-            }}>✕</button>
+            <button onClick={fetchData} className="glass-btn-primary" style={{ padding: '8px 16px', border: 'none', borderRadius: 'var(--radius-sm)', cursor: 'pointer', fontWeight: 600, fontSize: 13, color: '#fff' }}>🔄 刷新</button>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 18, cursor: 'pointer' }}>✕</button>
           </div>
         </div>
 
         {/* SVG 流程图 */}
-        <div style={{
-          flex: 1,
-          background: 'var(--bg-primary)',
-          borderRadius: 'var(--radius)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
+        <div className="glass-card" style={{ flex: 1, borderRadius: 'var(--radius-md)', position: 'relative', overflow: 'hidden' }}>
           <svg width="100%" height="100%" viewBox="0 0 800 450">
             {/* 连线 */}
             {connections.map((conn, i) => {
-              const fromX = conn.from.x
-              const fromY = conn.from.y + 30
-              const toX = conn.to.x
-              const toY = conn.to.y - 10
-              
+              const fromX = conn.from.x, fromY = conn.from.y + 30
+              const toX = conn.to.x, toY = conn.to.y - 10
               return (
                 <g key={i}>
-                  <line
-                    x1={fromX}
-                    y1={fromY}
-                    x2={toX}
-                    y2={toY}
-                    stroke={conn.color}
-                    strokeWidth={2}
-                    strokeDasharray="5,5"
-                    opacity={0.6}
-                  />
-                  {/* 箭头 */}
-                  <polygon
-                    points={`${toX},${toY} ${toX-5},${toY-10} ${toX+5},${toY-10}`}
-                    fill={conn.color}
-                    opacity={0.8}
-                  />
+                  <line x1={fromX} y1={fromY} x2={toX} y2={toY} stroke={conn.color} strokeWidth={2} strokeDasharray="5,5" opacity={0.5} />
+                  <polygon points={`${toX},${toY} ${toX-5},${toY-10} ${toX+5},${toY-10}`} fill={conn.color} opacity={0.7} />
                 </g>
               )
             })}
@@ -171,103 +91,28 @@ export default function CollaborationFlow({ isOpen, onClose }) {
             {AGENTS.map(agent => {
               const status = getAgentStatus(agent.id)
               const isSelected = selectedAgent === agent.id
-              
               return (
-                <g
-                  key={agent.id}
-                  onClick={() => setSelectedAgent(isSelected ? null : agent.id)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {/* 背景圆 */}
-                  <circle
-                    cx={agent.x}
-                    cy={agent.y}
-                    r={35}
-                    fill={agent.color + '20'}
-                    stroke={isSelected ? agent.color : 'var(--border)'}
-                    strokeWidth={isSelected ? 3 : 1}
-                  />
-                  
-                  {/* 图标 */}
-                  <text
-                    x={agent.x}
-                    y={agent.y - 5}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={24}
-                  >
-                    {agent.icon}
-                  </text>
-                  
-                  {/* 名称 */}
-                  <text
-                    x={agent.x}
-                    y={agent.y + 25}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={12}
-                    fill={agent.color}
-                    fontWeight="bold"
-                  >
-                    {agent.name}
-                  </text>
-                  
-                  {/* 状态指示器 */}
-                  {status.activeTasks > 0 && (
-                    <circle
-                      cx={agent.x + 25}
-                      cy={agent.y - 25}
-                      r={8}
-                      fill="#4caf50"
-                    />
-                  )}
-                  {status.unreadMessages > 0 && (
-                    <circle
-                      cx={agent.x - 25}
-                      cy={agent.y - 25}
-                      r={8}
-                      fill="#f44336"
-                    />
-                  )}
+                <g key={agent.id} onClick={() => setSelectedAgent(isSelected ? null : agent.id)} style={{ cursor: 'pointer' }}>
+                  <circle cx={agent.x} cy={agent.y} r={35} fill={agent.color + '15'} stroke={isSelected ? agent.color : 'rgba(255,255,255,0.1)'} strokeWidth={isSelected ? 2 : 1} />
+                  <text x={agent.x} y={agent.y - 5} textAnchor="middle" dominantBaseline="middle" fontSize={24}>{agent.icon}</text>
+                  <text x={agent.x} y={agent.y + 25} textAnchor="middle" dominantBaseline="middle" fontSize={12} fill={agent.color} fontWeight="600">{agent.name}</text>
+                  {status.activeTasks > 0 && <circle cx={agent.x + 25} cy={agent.y - 25} r={8} fill="#4caf50" opacity={0.8} />}
+                  {status.unreadMessages > 0 && <circle cx={agent.x - 25} cy={agent.y - 25} r={8} fill="#f44336" opacity={0.8} />}
                 </g>
               )
             })}
           </svg>
 
-          {/* 选中Agent的详情 */}
+          {/* 选中Agent详情 */}
           {selectedAgent && (
-            <div style={{
-              position: 'absolute',
-              top: 10,
-              right: 10,
-              background: 'var(--bg-card)',
-              borderRadius: 'var(--radius)',
-              padding: 16,
-              border: '1px solid var(--border)',
-              width: 250,
+            <div className="glass-card animate-fade-in" style={{
+              position: 'absolute', top: 12, right: 12, padding: 16, borderRadius: 'var(--radius-md)', width: 240,
             }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                marginBottom: 12,
-              }}>
-                <span style={{ fontSize: 24 }}>
-                  {AGENTS.find(a => a.id === selectedAgent)?.icon}
-                </span>
-                <span style={{
-                  fontSize: 16,
-                  fontWeight: 'bold',
-                  color: 'var(--text-primary)',
-                }}>
-                  {AGENTS.find(a => a.id === selectedAgent)?.name}
-                </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: 24 }}>{AGENTS.find(a => a.id === selectedAgent)?.icon}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{AGENTS.find(a => a.id === selectedAgent)?.name}</span>
               </div>
-              
-              <div style={{
-                fontSize: 12,
-                color: 'var(--text-secondary)',
-              }}>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
                 {(() => {
                   const status = getAgentStatus(selectedAgent)
                   return (
@@ -284,16 +129,7 @@ export default function CollaborationFlow({ isOpen, onClose }) {
         </div>
 
         {/* 图例 */}
-        <div style={{
-          display: 'flex',
-          gap: 16,
-          marginTop: 12,
-          padding: '8px 12px',
-          background: 'var(--bg-secondary)',
-          borderRadius: 'var(--radius)',
-          fontSize: 12,
-          color: 'var(--text-secondary)',
-        }}>
+        <div className="glass-card" style={{ display: 'flex', gap: 16, marginTop: 12, padding: '8px 14px', borderRadius: 'var(--radius-sm)', fontSize: 12, color: 'var(--text-secondary)' }}>
           <span>🟠 任务消息</span>
           <span>🟢 结果消息</span>
           <span>🔴 错误消息</span>

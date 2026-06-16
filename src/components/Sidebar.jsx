@@ -14,10 +14,8 @@ function groupSessions(sessions) {
   const groups = { '今天': [], '昨天': [], '最近7天': [], '更早': [] }
 
   sessions.forEach(s => {
-    // 尝试解析时间字符串
     let updatedAt = s.updatedAt
     if (!updatedAt && s.time) {
-      // 解析 "6/10 14:18" 格式
       const match = s.time.match(/(\d+)\/(\d+)\s+(\d+):(\d+)/)
       if (match) {
         const [, month, day, hour, minute] = match
@@ -65,7 +63,6 @@ export default function Sidebar({
   const sidebarRef = useRef(null)
   const editInputRef = useRef(null)
 
-  // 展开/折叠动画
   useEffect(() => {
     if (sidebarRef.current) {
       gsap.to(sidebarRef.current, {
@@ -74,13 +71,11 @@ export default function Sidebar({
         ease: 'power2.inOut',
       })
     }
-    // 展开时刷新会话列表
     if (expanded && onRefreshSessions) {
       onRefreshSessions()
     }
   }, [expanded])
 
-  // 点击外部关闭右键菜单
   useEffect(() => {
     const close = () => setContextMenu(null)
     if (contextMenu) {
@@ -89,7 +84,6 @@ export default function Sidebar({
     }
   }, [contextMenu])
 
-  // 编辑标题时聚焦
   useEffect(() => {
     if (editingId && editInputRef.current) {
       editInputRef.current.focus()
@@ -133,10 +127,9 @@ export default function Sidebar({
   return (
     <aside
       ref={sidebarRef}
+      className="glass-sidebar"
       style={{
         width: 60,
-        background: 'var(--bg-secondary)',
-        borderRight: '1px solid var(--border)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -145,89 +138,86 @@ export default function Sidebar({
       }}
     >
       {/* 顶部区域 */}
-      <div style={{ padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {/* Logo + 展开按钮 */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          cursor: 'pointer',
-          padding: '4px',
-          borderRadius: 'var(--radius)',
-        }}
+      <div style={{ padding: '14px 8px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* Logo */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+            padding: '6px',
+            borderRadius: 'var(--radius-md)',
+            transition: 'var(--transition)',
+          }}
           onClick={() => setExpanded(v => !v)}
+          onMouseEnter={e => e.currentTarget.style.background = 'var(--glass-bg-hover)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
-          <span style={{ fontSize: 22, flexShrink: 0, textAlign: 'center', width: 28 }}>🤖</span>
+          <div style={{
+            width: 28,
+            height: 28,
+            borderRadius: 8,
+            background: 'linear-gradient(135deg, var(--accent), var(--accent-light))',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 16,
+            flexShrink: 0,
+            boxShadow: '0 2px 8px var(--accent-glow)',
+          }}>🤖</div>
           {expanded && (
             <span style={{
               fontSize: 15,
-              fontWeight: 'bold',
+              fontWeight: 700,
               color: 'var(--text-primary)',
               whiteSpace: 'nowrap',
+              letterSpacing: '-0.3px',
             }}>
               AgentDesk
             </span>
           )}
         </div>
 
-        {/* 新建会话按钮 - 仅 chat tab 且展开时显示 */}
+        {/* 新建会话 - 展开 */}
         {activeTab === 'chat' && expanded && (
           <div style={{ display: 'flex', gap: 4 }}>
             <button
               onClick={onCreateSession}
+              className="glass-btn"
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
                 padding: '8px 10px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                background: 'transparent',
-                color: 'var(--text-primary)',
-                cursor: 'pointer',
                 fontSize: 13,
                 whiteSpace: 'nowrap',
-                transition: 'background 0.15s',
                 flex: 1,
               }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              <span style={{ fontSize: 16 }}>✏️</span>
+              <span style={{ fontSize: 14 }}>✏️</span>
               新建对话
             </button>
             <button
               onClick={onOpenSessionSearch}
               title="搜索历史会话"
-              style={{
-                padding: '8px 10px',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius)',
-                background: 'transparent',
-                color: 'var(--text-secondary)',
-                cursor: 'pointer',
-                fontSize: 16,
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              className="glass-btn"
+              style={{ padding: '8px 10px', fontSize: 14 }}
             >
               🔍
             </button>
           </div>
         )}
-        {/* 折叠状态下的新建按钮 */}
+
+        {/* 新建会话 - 折叠 */}
         {activeTab === 'chat' && !expanded && (
           <button
             onClick={onCreateSession}
             title="新建对话"
+            className="glass-btn"
             style={{
               width: 44, height: 36,
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              background: 'transparent',
-              color: 'var(--text-secondary)',
-              fontSize: 18,
-              cursor: 'pointer',
+              fontSize: 16,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -239,40 +229,29 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* 搜索框 - 仅展开且在 chat tab 时 */}
+      {/* 搜索框 */}
       {activeTab === 'chat' && expanded && (
         <div style={{ padding: '0 8px 8px' }}>
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="搜索对话..."
-            style={{
-              width: '100%',
-              padding: '7px 10px',
-              border: '1px solid var(--border)',
-              borderRadius: 'var(--radius)',
-              background: 'var(--bg-primary)',
-              color: 'var(--text-primary)',
-              fontSize: 13,
-              outline: 'none',
-            }}
+            className="glass-input"
+            style={{ width: '100%', padding: '7px 10px', fontSize: 13 }}
           />
         </div>
       )}
 
-      {/* 会话列表 - 仅展开且在 chat tab 时 */}
+      {/* 会话列表 - 展开 */}
       {activeTab === 'chat' && expanded && (
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '0 8px',
-        }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 8px' }}>
           {grouped.length === 0 && (
             <div style={{
               textAlign: 'center',
               color: 'var(--text-secondary)',
               fontSize: 12,
               padding: '20px 0',
+              opacity: 0.6,
             }}>
               {search ? '没有匹配的对话' : '暂无对话历史'}
             </div>
@@ -280,44 +259,39 @@ export default function Sidebar({
           {grouped.map(([label, list]) => (
             <div key={label} style={{ marginBottom: 8 }}>
               <div style={{
-                fontSize: 11,
+                fontSize: 10,
                 color: 'var(--text-secondary)',
-                padding: '6px 4px 2px',
-                fontWeight: 'bold',
+                padding: '8px 6px 4px',
+                fontWeight: 600,
                 textTransform: 'uppercase',
-                letterSpacing: 0.5,
+                letterSpacing: 1,
+                opacity: 0.5,
               }}>
                 {label}
               </div>
               {list.map(session => (
                 <div
                   key={session.id}
-                  onClick={() => {
-                    onSelectSession(session.id)
-                    onTabChange('chat')
-                  }}
+                  onClick={() => { onSelectSession(session.id); onTabChange('chat') }}
                   onContextMenu={e => handleContextMenu(e, session)}
                   style={{
                     padding: '8px 10px',
-                    borderRadius: 'var(--radius)',
+                    borderRadius: 'var(--radius-sm)',
                     cursor: 'pointer',
                     fontSize: 13,
-                    color: session.id === activeSessionId
-                      ? 'var(--accent)'
-                      : 'var(--text-primary)',
-                    background: session.id === activeSessionId
-                      ? 'var(--bg-card)'
-                      : 'transparent',
+                    color: session.id === activeSessionId ? 'var(--accent-light)' : 'var(--text-primary)',
+                    background: session.id === activeSessionId ? 'var(--glass-bg-hover)' : 'transparent',
+                    border: session.id === activeSessionId ? '1px solid var(--glass-border-hover)' : '1px solid transparent',
                     marginBottom: 2,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
-                    transition: 'background 0.15s',
+                    transition: 'var(--transition)',
                     position: 'relative',
                   }}
                   onMouseEnter={e => {
                     if (session.id !== activeSessionId)
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
+                      e.currentTarget.style.background = 'var(--glass-bg)'
                   }}
                   onMouseLeave={e => {
                     if (session.id !== activeSessionId)
@@ -334,16 +308,8 @@ export default function Sidebar({
                         if (e.key === 'Enter') handleConfirmRename()
                         if (e.key === 'Escape') setEditingId(null)
                       }}
-                      style={{
-                        width: '100%',
-                        padding: '2px 4px',
-                        border: '1px solid var(--accent)',
-                        borderRadius: 4,
-                        background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                        fontSize: 13,
-                        outline: 'none',
-                      }}
+                      className="glass-input"
+                      style={{ width: '100%', padding: '2px 6px', fontSize: 13, borderRadius: 6 }}
                     />
                   ) : (
                     session.title
@@ -355,7 +321,7 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* chat tab 折叠状态：显示会话数 */}
+      {/* 折叠状态会话图标 */}
       {activeTab === 'chat' && !expanded && (
         <div style={{
           flex: 1,
@@ -373,15 +339,16 @@ export default function Sidebar({
               title={s.title}
               style={{
                 width: 36, height: 36,
-                border: 'none',
-                borderRadius: 'var(--radius)',
-                background: s.id === activeSessionId ? 'var(--bg-card)' : 'transparent',
-                color: s.id === activeSessionId ? 'var(--accent)' : 'var(--text-secondary)',
+                border: s.id === activeSessionId ? '1px solid var(--glass-border-hover)' : '1px solid transparent',
+                borderRadius: 'var(--radius-sm)',
+                background: s.id === activeSessionId ? 'var(--glass-bg-hover)' : 'transparent',
+                color: s.id === activeSessionId ? 'var(--accent-light)' : 'var(--text-secondary)',
                 fontSize: 14,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                transition: 'var(--transition)',
               }}
             >
               💬
@@ -390,7 +357,6 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* 非 chat tab 时，中间留空 */}
       {activeTab !== 'chat' && <div style={{ flex: 1 }} />}
 
       {/* 导航标签 */}
@@ -409,11 +375,13 @@ export default function Sidebar({
             style={{
               width: expanded ? '100%' : 44,
               height: 40,
-              border: 'none',
-              borderRadius: 'var(--radius)',
-              background: activeTab === tab.id ? 'var(--accent)' : 'transparent',
-              color: activeTab === tab.id ? 'var(--bg-primary)' : 'var(--text-secondary)',
-              fontSize: expanded ? 14 : 18,
+              border: activeTab === tab.id ? '1px solid rgba(108, 92, 231, 0.3)' : '1px solid transparent',
+              borderRadius: 'var(--radius-md)',
+              background: activeTab === tab.id
+                ? 'linear-gradient(135deg, var(--accent), var(--accent-light))'
+                : 'transparent',
+              color: activeTab === tab.id ? '#fff' : 'var(--text-secondary)',
+              fontSize: expanded ? 13 : 18,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -421,88 +389,72 @@ export default function Sidebar({
               gap: expanded ? 10 : 0,
               padding: expanded ? '0 12px' : 0,
               whiteSpace: 'nowrap',
+              transition: 'var(--transition)',
+              fontWeight: activeTab === tab.id ? 600 : 400,
+              boxShadow: activeTab === tab.id ? '0 2px 12px var(--accent-glow)' : 'none',
+            }}
+            onMouseEnter={e => {
+              if (activeTab !== tab.id) e.currentTarget.style.background = 'var(--glass-bg)'
+            }}
+            onMouseLeave={e => {
+              if (activeTab !== tab.id) e.currentTarget.style.background = 'transparent'
             }}
           >
-            <span style={{ fontSize: expanded ? 16 : 20 }}>{tab.icon}</span>
+            <span style={{ fontSize: expanded ? 15 : 18 }}>{tab.icon}</span>
             {expanded && tab.label}
           </button>
         ))}
       </div>
 
-      {/* 设置按钮 */}
-      <div style={{ padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 4, alignItems: expanded ? 'stretch' : 'center' }}>
-        {/* 协作按钮 */}
-        <button
-          title="协作流程"
-          onClick={() => onOpenCollaboration?.()}
-          style={{
-            width: expanded ? '100%' : 44,
-            height: 36,
-            border: 'none',
-            borderRadius: 'var(--radius)',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            fontSize: expanded ? 13 : 16,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: expanded ? 'flex-start' : 'center',
-            gap: expanded ? 8 : 0,
-            padding: expanded ? '0 12px' : 0,
-          }}
-        >
-          <span style={{ fontSize: expanded ? 14 : 16 }}>🔄</span>
-          {expanded && '协作流程'}
-        </button>
-        
-        {/* 消息按钮 */}
-        <button
-          title="消息中心"
-          onClick={() => onOpenMessages?.()}
-          style={{
-            width: expanded ? '100%' : 44,
-            height: 36,
-            border: 'none',
-            borderRadius: 'var(--radius)',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            fontSize: expanded ? 13 : 16,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: expanded ? 'flex-start' : 'center',
-            gap: expanded ? 8 : 0,
-            padding: expanded ? '0 12px' : 0,
-          }}
-        >
-          <span style={{ fontSize: expanded ? 14 : 16 }}>💬</span>
-          {expanded && '消息中心'}
-        </button>
-        
-        {/* 任务按钮 */}
-        <button
-          title="任务管理"
-          onClick={() => onOpenTasks?.()}
-          style={{
-            width: expanded ? '100%' : 44,
-            height: 36,
-            border: 'none',
-            borderRadius: 'var(--radius)',
-            background: 'transparent',
-            color: 'var(--text-secondary)',
-            fontSize: expanded ? 13 : 16,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: expanded ? 'flex-start' : 'center',
-            gap: expanded ? 8 : 0,
-            padding: expanded ? '0 12px' : 0,
-          }}
-        >
-          <span style={{ fontSize: expanded ? 14 : 16 }}>📋</span>
-          {expanded && '任务管理'}
-        </button>
-        
+      {/* 底部工具按钮 */}
+      <div style={{
+        padding: '4px 8px 8px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2,
+        alignItems: expanded ? 'stretch' : 'center',
+        borderTop: '1px solid var(--glass-border)',
+        marginTop: 4,
+      }}>
+        {[
+          { icon: '🔄', label: '协作流程', action: onOpenCollaboration },
+          { icon: '💬', label: '消息中心', action: onOpenMessages },
+          { icon: '📋', label: '任务管理', action: onOpenTasks },
+        ].map((btn, i) => (
+          <button
+            key={i}
+            title={btn.label}
+            onClick={() => btn.action?.()}
+            style={{
+              width: expanded ? '100%' : 44,
+              height: 36,
+              border: '1px solid transparent',
+              borderRadius: 'var(--radius-sm)',
+              background: 'transparent',
+              color: 'var(--text-secondary)',
+              fontSize: expanded ? 13 : 15,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: expanded ? 'flex-start' : 'center',
+              gap: expanded ? 8 : 0,
+              padding: expanded ? '0 12px' : 0,
+              transition: 'var(--transition)',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'var(--glass-bg)'
+              e.currentTarget.style.borderColor = 'var(--glass-border)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.borderColor = 'transparent'
+            }}
+          >
+            <span style={{ fontSize: expanded ? 14 : 15 }}>{btn.icon}</span>
+            {expanded && btn.label}
+          </button>
+        ))}
+
         {/* 设置按钮 */}
         <button
           title="设置"
@@ -510,8 +462,8 @@ export default function Sidebar({
           style={{
             width: expanded ? '100%' : 44,
             height: 40,
-            border: 'none',
-            borderRadius: 'var(--radius)',
+            border: '1px solid transparent',
+            borderRadius: 'var(--radius-md)',
             background: 'transparent',
             color: 'var(--text-secondary)',
             fontSize: expanded ? 14 : 18,
@@ -521,9 +473,19 @@ export default function Sidebar({
             justifyContent: expanded ? 'flex-start' : 'center',
             gap: expanded ? 10 : 0,
             padding: expanded ? '0 12px' : 0,
+            transition: 'var(--transition)',
+            marginTop: 4,
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'var(--glass-bg)'
+            e.currentTarget.style.borderColor = 'var(--glass-border)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.borderColor = 'transparent'
           }}
         >
-          <span style={{ fontSize: expanded ? 16 : 20 }}>⚙️</span>
+          <span style={{ fontSize: expanded ? 15 : 18 }}>⚙️</span>
           {expanded && '设置'}
         </button>
       </div>
@@ -531,23 +493,22 @@ export default function Sidebar({
       {/* 右键菜单 */}
       {contextMenu && (
         <div
+          className="glass-modal animate-fade-in"
           style={{
             position: 'fixed',
             left: contextMenu.x,
             top: contextMenu.y,
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--radius)',
             padding: '4px 0',
             zIndex: 1000,
-            minWidth: 140,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            minWidth: 150,
           }}
         >
           <button
             onClick={() => handleStartRename(contextMenu.session)}
             style={{
-              display: 'block',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
               width: '100%',
               padding: '8px 16px',
               border: 'none',
@@ -556,19 +517,19 @@ export default function Sidebar({
               fontSize: 13,
               cursor: 'pointer',
               textAlign: 'left',
+              transition: 'var(--transition)',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--glass-bg-hover)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             ✏️ 重命名
           </button>
           <button
-            onClick={() => {
-              onDeleteSession(contextMenu.session.id)
-              setContextMenu(null)
-            }}
+            onClick={() => { onDeleteSession(contextMenu.session.id); setContextMenu(null) }}
             style={{
-              display: 'block',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
               width: '100%',
               padding: '8px 16px',
               border: 'none',
@@ -577,8 +538,9 @@ export default function Sidebar({
               fontSize: 13,
               cursor: 'pointer',
               textAlign: 'left',
+              transition: 'var(--transition)',
             }}
-            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239, 83, 80, 0.1)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             🗑️ 删除

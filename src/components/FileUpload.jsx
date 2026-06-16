@@ -22,33 +22,19 @@ export default function FileUpload({ onUpload }) {
   const handleDrop = (e) => {
     e.preventDefault()
     setIsDragging(false)
-    // 拖拽成功动画
     gsap.to(dropZoneRef.current, {
-      scale: 1.02,
-      duration: 0.2,
-      ease: 'power2.inOut',
-      yoyo: true,
-      repeat: 1,
+      scale: 1.02, duration: 0.2, ease: 'power2.inOut', yoyo: true, repeat: 1,
     })
     handleFiles(e.dataTransfer.files)
   }
 
-  const handleDragOver = (e) => {
-    e.preventDefault()
-    setIsDragging(true)
-  }
-
-  const handleDragLeave = () => {
-    setIsDragging(false)
-  }
+  const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true) }
+  const handleDragLeave = () => setIsDragging(false)
 
   const removeFile = (e, id) => {
     gsap.to(e.currentTarget.closest('.file-item'), {
-      x: 50,
-      opacity: 0,
-      duration: 0.3,
-      ease: 'power2.in',
-      onComplete: () => setFiles(prev => prev.filter(f => f.id !== id))
+      x: 50, opacity: 0, duration: 0.3, ease: 'power2.in',
+      onComplete: () => setFiles(prev => prev.filter(f => f.id !== id)),
     })
   }
 
@@ -66,25 +52,9 @@ export default function FileUpload({ onUpload }) {
     return '📎'
   }
 
-  const handleItemHover = (e) => {
-    gsap.to(e.currentTarget, {
-      x: 4,
-      borderColor: 'var(--accent)',
-      duration: 0.2,
-    })
-  }
-
-  const handleItemLeave = (e) => {
-    gsap.to(e.currentTarget, {
-      x: 0,
-      borderColor: 'var(--border)',
-      duration: 0.2,
-    })
-  }
-
   return (
-    <div style={{ padding: 20, maxWidth: 800, margin: '0 auto' }}>
-      <h2 style={{ marginBottom: 20, color: 'var(--text-primary)' }}>📁 文件管理</h2>
+    <div style={{ padding: 24, maxWidth: 800, margin: '0 auto' }}>
+      <h2 style={{ marginBottom: 20, color: 'var(--text-primary)', fontSize: 20, fontWeight: 600 }}>📁 文件管理</h2>
 
       <div
         ref={dropZoneRef}
@@ -92,78 +62,59 @@ export default function FileUpload({ onUpload }) {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onClick={() => fileInputRef.current?.click()}
-        onMouseEnter={(e) => gsap.to(e.currentTarget, { scale: 1.01, duration: 0.2 })}
-        onMouseLeave={(e) => gsap.to(e.currentTarget, { scale: 1, duration: 0.2 })}
+        className="glass-card"
         style={{
-          padding: 40,
-          border: `2px dashed ${isDragging ? 'var(--accent)' : 'var(--border)'}`,
-          borderRadius: 'var(--radius)',
-          background: isDragging ? 'rgba(0, 212, 255, 0.1)' : 'var(--bg-card)',
+          padding: 48,
+          border: `2px dashed ${isDragging ? 'var(--accent)' : 'var(--glass-border)'}`,
+          borderRadius: 'var(--radius-lg)',
+          background: isDragging ? 'rgba(108, 92, 231, 0.08)' : undefined,
           textAlign: 'center',
           cursor: 'pointer',
-          marginBottom: 20,
+          marginBottom: 24,
+          transition: 'var(--transition)',
         }}
       >
-        <input
-          type="file"
-          ref={fileInputRef}
-          style={{ display: 'none' }}
-          onChange={(e) => handleFiles(e.target.files)}
-          multiple
-        />
-        <div style={{ fontSize: 48, marginBottom: 12 }}>
+        <input type="file" ref={fileInputRef} style={{ display: 'none' }} onChange={(e) => handleFiles(e.target.files)} multiple />
+        <div style={{
+          width: 72, height: 72, margin: '0 auto 16px', borderRadius: 20,
+          background: isDragging ? 'linear-gradient(135deg, var(--accent), var(--accent-light))' : 'var(--glass-bg)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32,
+          transition: 'var(--transition)',
+          boxShadow: isDragging ? '0 8px 32px var(--accent-glow)' : 'none',
+        }}>
           {isDragging ? '📥' : '📤'}
         </div>
-        <p style={{ color: 'var(--text-primary)', marginBottom: 8 }}>
+        <p style={{ color: 'var(--text-primary)', marginBottom: 8, fontSize: 15, fontWeight: 500 }}>
           {isDragging ? '释放以上传文件' : '点击或拖拽文件到此处'}
         </p>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14 }}>
-          支持任意文件类型
-        </p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 13, opacity: 0.6 }}>支持任意文件类型</p>
       </div>
 
       {files.length > 0 && (
         <div>
-          <h3 style={{ marginBottom: 12, color: 'var(--text-secondary)' }}>
+          <h3 style={{ marginBottom: 12, color: 'var(--text-secondary)', fontSize: 14, fontWeight: 500 }}>
             已选择 {files.length} 个文件
           </h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {files.map(file => (
               <div
                 key={file.id}
-                className="file-item"
-                onMouseEnter={handleItemHover}
-                onMouseLeave={handleItemLeave}
+                className="file-item glass-card animate-fade-in"
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '12px 16px',
-                  background: 'var(--bg-card)',
-                  borderRadius: 'var(--radius)',
-                  border: '1px solid var(--border)',
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '12px 16px', borderRadius: 'var(--radius-md)',
+                  cursor: 'default',
                 }}
               >
                 <span style={{ fontSize: 24 }}>{getFileIcon(file.type)}</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ color: 'var(--text-primary)' }}>{file.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    {formatSize(file.size)}
-                  </div>
+                  <div style={{ color: 'var(--text-primary)', fontSize: 14 }}>{file.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', opacity: 0.6 }}>{formatSize(file.size)}</div>
                 </div>
                 <button
                   onClick={(e) => removeFile(e, file.id)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    fontSize: 16,
-                    padding: '4px',
-                  }}
-                >
-                  ✕
-                </button>
+                  style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14, padding: '4px 8px', borderRadius: 6, transition: 'var(--transition)' }}
+                >✕</button>
               </div>
             ))}
           </div>
