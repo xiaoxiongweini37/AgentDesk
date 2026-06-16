@@ -1080,12 +1080,13 @@ const server = http.createServer((req, res) => {
       }
 
       // 多种方式检测 Agent 状态
+      const isWindows = process.platform === 'win32';
       let isOnline = false;
       let uptime = null;
       let source = 'none';
 
-      // 方式1: 检查 tmux session（如果配置了）
-      if (agent.tmux) {
+      // 方式1: 检查 tmux session（仅 Linux/Mac，如果配置了）
+      if (!isWindows && agent.tmux) {
         try {
           execSync(`tmux has-session -t ${agent.tmux}`, { timeout: 3000 });
           isOnline = true;
@@ -1129,12 +1130,41 @@ const server = http.createServer((req, res) => {
         }
       }
 
+      // 方式3: Windows 上检查启动脚本是否存在
+      if (isWindows && !isOnline) {
+        try {
+          const scriptDir = path.join(os.homedir(), '.hermes', 'scripts');
+          if (fs.existsSync(scriptDir)) {
+            const scriptFiles = fs.readdirSync(scriptDir)
+              .filter(f => f.startsWith(`start_${agentId}_`) && f.endsWith('.ps1'))
+              .map(f => ({
+                name: f,
+                mtime: fs.statSync(path.join(scriptDir, f)).mtime,
+              }))
+              .sort((a, b) => b.mtime - a.mtime);
+
+            if (scriptFiles.length > 0) {
+              const lastScript = scriptFiles[0].mtime.getTime();
+              const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+              if (lastScript > fiveMinutesAgo) {
+                isOnline = true;
+                source = 'script';
+                uptime = Math.floor((Date.now() - lastScript) / 1000);
+              }
+            }
+          }
+        } catch (e) {
+          // 检查失败
+        }
+      }
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         id: agentId,
         status: isOnline ? 'online' : 'offline',
         uptime,
-        source, // 状态来源：tmux, session, none
+        source, // 状态来源：tmux, session, script, none
+        platform: isWindows ? 'windows' : 'unix',
         tmux: agent.tmux || null,
       }));
     } catch (err) {
@@ -1220,45 +1250,74 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      // 以 tmux 方式启动
-      // 构建带环境变量的启动命令
-      const envParts = [];
-      for (const [key, value] of Object.entries(startInfo.env)) {
-        if (value && key !== 'PATH' && !key.startsWith('_')) {
-          envParts.push(`${key}="${value}"`);
-        }
-      }
-      const fullCommand = envParts.length > 0
-        ? `${envParts.join(' ')} ${startInfo.fullCommand}`
-        : startInfo.fullCommand;
-
-      const tmuxCommand = `tmux new-session -d -s ${tmuxSessionName} "${fullCommand}"`;
+      // 根据平台选择启动方式
+      const isWindows = process.platform === 'win32';
+      let startSuccess = false;
+      let startMethod = '';
 
       try {
-        execSync(tmuxCommand, { timeout: 5000 });
-        console.log(`[Agent] ${agentId} 已在 tmux session "${tmuxSessionName}" 中启动`);
+        if (isWindows) {
+          // Windows: 使用 PowerShell 后台启动
+          // 创建一个启动脚本，避免环境变量过长问题
+          const scriptDir = path.join(os.homedir(), '.hermes', 'scripts');
+          if (!fs.existsSync(scriptDir)) {
+            fs.mkdirSync(scriptDir, { recursive: true });
+          }
 
-        // 等待一下让 Agent 初始化
-        execSync('sleep 2');
+          // 构建环境变量设置脚本
+          const envScript = Object.entries(startInfo.env)
+            .filter(([key, value]) => value && key !== 'PATH' && !key.startsWith('_'))
+            .map(([key, value]) => `$env:${key} = "${value}"`)
+            .join('\n');
 
-        // 检查是否启动成功
-        let isRunning = false;
-        try {
-          execSync(`tmux has-session -t ${tmuxSessionName}`, { timeout: 3000 });
-          isRunning = true;
-        } catch (e) {
-          isRunning = false;
+          const scriptContent = `
+# Agent 启动脚本 - ${agentId}
+${envScript}
+
+# 启动命令
+${startInfo.command} ${startInfo.args.join(' ')}
+`;
+
+          const scriptPath = path.join(scriptDir, `start_${agentId}_${sessionId}.ps1`);
+          fs.writeFileSync(scriptPath, scriptContent);
+
+          // 使用 PowerShell 后台启动
+          const psCommand = `Start-Process powershell -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "${scriptPath}" -WindowStyle Hidden`;
+
+          execSync(psCommand, { timeout: 10000 });
+          startSuccess = true;
+          startMethod = 'powershell';
+          console.log(`[Agent] ${agentId} 已通过 PowerShell 启动`);
+        } else {
+          // Linux/Mac: 使用 tmux
+          const envParts = [];
+          for (const [key, value] of Object.entries(startInfo.env)) {
+            if (value && key !== 'PATH' && !key.startsWith('_')) {
+              envParts.push(`${key}="${value}"`);
+            }
+          }
+          const fullCommand = envParts.length > 0
+            ? `${envParts.join(' ')} ${startInfo.fullCommand}`
+            : startInfo.fullCommand;
+
+          const tmuxCommand = `tmux new-session -d -s ${tmuxSessionName} "${fullCommand}"`;
+          execSync(tmuxCommand, { timeout: 5000 });
+          startSuccess = true;
+          startMethod = 'tmux';
+          console.log(`[Agent] ${agentId} 已在 tmux session "${tmuxSessionName}" 中启动`);
         }
 
-        // 更新配置文件中的 tmux session 名称
-        if (!agent.tmux) {
+        // 等待一下让 Agent 初始化
+        execSync(isWindows ? 'timeout /t 2 /nobreak >nul' : 'sleep 2');
+
+        // 更新配置文件
+        if (!agent.tmux && !isWindows) {
           const configPath = path.join(os.homedir(), '.hermes/agent-orchestrator/config.yaml');
           try {
             const config = yaml.parse(fs.readFileSync(configPath, 'utf8')) || {};
             if (config.agents && config.agents[agentId]) {
               config.agents[agentId].tmux = tmuxSessionName;
               fs.writeFileSync(configPath, yaml.stringify(config, { lineWidth: -1 }), 'utf8');
-              // 重新加载配置
               Object.assign(appConfig, loadConfig());
             }
           } catch (e) {
@@ -1269,18 +1328,18 @@ const server = http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           session_id: sessionId,
-          tmux: tmuxSessionName,
+          tmux: isWindows ? null : tmuxSessionName,
           cli_type: startInfo.cliType,
           cli_name: startInfo.cliName,
           cli_icon: startInfo.cliIcon,
-          status: isRunning ? 'started' : 'failed',
-          message: isRunning
-            ? `${startInfo.cliIcon} ${startInfo.cliName} 已在 tmux session "${tmuxSessionName}" 中启动`
-            : `${startInfo.cliName} 启动失败，请检查日志`,
+          start_method: startMethod,
+          status: startSuccess ? 'started' : 'failed',
+          message: startSuccess
+            ? `${startInfo.cliIcon} ${startInfo.cliName} 已通过 ${startMethod} 启动`
+            : `${startInfo.cliName} 启动失败`,
         }));
-      } catch (tmuxErr) {
-        // tmux 启动失败
-        console.error(`[Agent] tmux 启动失败:`, tmuxErr.message);
+      } catch (startErr) {
+        console.error(`[Agent] 启动失败:`, startErr.message);
 
         // 回退：只创建会话文件
         const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
