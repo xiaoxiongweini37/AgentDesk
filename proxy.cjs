@@ -1264,13 +1264,30 @@ const server = http.createServer((req, res) => {
           }
 
           // 构建环境变量设置脚本
+          // 过滤掉包含括号的环境变量（如 CommonProgramFiles(x86)）
+          // 过滤掉系统变量和不需要的变量
           const envScript = Object.entries(startInfo.env)
-            .filter(([key, value]) => value && key !== 'PATH' && !key.startsWith('_'))
-            .map(([key, value]) => `$env:${key} = "${value}"`)
+            .filter(([key, value]) => {
+              // 排除条件
+              if (!value) return false;  // 空值
+              if (key === 'PATH') return false;  // PATH 变量
+              if (key.startsWith('_')) return false;  // 下划线开头的变量
+              if (key.includes('(') || key.includes(')')) return false;  // 包含括号的变量
+              if (key.includes('.')) return false;  // 包含点号的变量（如 ShadowBot.1.mutex）
+              if (key.length > 50) return false;  // 过长的变量名
+              return true;
+            })
+            .map(([key, value]) => {
+              // 转义值中的双引号
+              const escapedValue = value.replace(/"/g, '`"');
+              return `$env:${key} = "${escapedValue}"`;
+            })
             .join('\n');
 
           const scriptContent = `# Agent 启动脚本 - ${agentId}
 # 生成时间: ${new Date().toLocaleString()}
+# 注意：此脚本仅设置 Agent 需要的环境变量
+
 ${envScript}
 
 # 启动命令
