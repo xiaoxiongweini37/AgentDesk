@@ -495,27 +495,39 @@ function AgentSettings() {
           </div>
 
           {/* 状态显示 */}
-          <div className="glass-card" style={{ padding: '10px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{
-              width: 10,
-              height: 10,
-              borderRadius: '50%',
-              background: agentStatus[selectedAgent.id]?.status === 'online' ? 'var(--success)' : 'var(--text-secondary)',
-              boxShadow: agentStatus[selectedAgent.id]?.status === 'online' ? '0 0 8px var(--success)' : 'none',
-            }} />
-            <span style={{ fontSize: 13, color: 'var(--text-primary)' }}>
-              状态：{agentStatus[selectedAgent.id]?.status === 'online' ? '🟢 在线' : '🔴 离线'}
-            </span>
-            {agentStatus[selectedAgent.id]?.uptime && (
-              <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                运行时间：{Math.floor(agentStatus[selectedAgent.id].uptime / 60)} 分钟
+          <div className="glass-card" style={{ padding: '12px 14px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <span style={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                background: agentStatus[selectedAgent.id]?.status === 'online' ? 'var(--success)' : 'var(--text-secondary)',
+                boxShadow: agentStatus[selectedAgent.id]?.status === 'online' ? '0 0 8px var(--success)' : 'none',
+              }} />
+              <span style={{ fontSize: 13, color: 'var(--text-primary)', fontWeight: 600 }}>
+                {agentStatus[selectedAgent.id]?.status === 'online' ? '🟢 在线' : '🔴 离线'}
               </span>
-            )}
+              {agentStatus[selectedAgent.id]?.source && (
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)', padding: '2px 8px', background: 'var(--glass-bg)', borderRadius: 10 }}>
+                  来源: {agentStatus[selectedAgent.id].source === 'tmux' ? 'tmux 会话' : agentStatus[selectedAgent.id].source === 'session' ? '活跃会话' : '未检测到'}
+                </span>
+              )}
+              {agentStatus[selectedAgent.id]?.uptime != null && (
+                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                  {agentStatus[selectedAgent.id].source === 'session'
+                    ? `${Math.floor(agentStatus[selectedAgent.id].uptime / 60)} 分钟前活跃`
+                    : `运行 ${Math.floor(agentStatus[selectedAgent.id].uptime / 60)} 分钟`}
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              💡 状态说明：在线 = 有活跃的 tmux 会话或最近5分钟内有对话活动
+            </div>
           </div>
 
           {/* 测试连接 */}
           <div className="glass-card" style={{ padding: '12px 14px', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
               <button
                 onClick={handleTestConnection}
                 disabled={testing}
@@ -532,6 +544,9 @@ function AgentSettings() {
                   {testResult.success ? `✅ ${testResult.message}` : `❌ ${testResult.message}`}
                 </span>
               )}
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              💡 测试连接验证 API Key 和 Base URL 是否有效，能否成功连接到 API 服务
             </div>
           </div>
 

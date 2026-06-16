@@ -601,6 +601,12 @@ export default function Chat({
             const isSelected = selectedAgentId === agent.id
             const status = agentStatus[agent.id]
             const isOnline = status?.status === 'online'
+            const source = status?.source || 'none'
+
+            // 状态提示
+            const statusTip = isOnline
+              ? `在线 (${source === 'tmux' ? 'tmux 会话' : '活跃会话'})`
+              : '离线 (无活跃会话)'
 
             return (
               <button
@@ -620,7 +626,7 @@ export default function Chat({
                   color: isSelected ? '#fff' : 'var(--text-primary)',
                   transition: 'var(--transition)',
                 }}
-                title={`${agent.name} - ${agent.role || '无描述'}`}
+                title={`${agent.name}\n${agent.role || '无描述'}\n状态: ${statusTip}`}
               >
                 <span style={{
                   width: 6,

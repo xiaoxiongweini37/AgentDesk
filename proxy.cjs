@@ -1060,15 +1060,17 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      // Check if tmux session exists (if configured)
+      // 多种方式检测 Agent 状态
       let isOnline = false;
       let uptime = null;
+      let source = 'none';
 
+      // 方式1: 检查 tmux session（如果配置了）
       if (agent.tmux) {
         try {
           execSync(`tmux has-session -t ${agent.tmux}`, { timeout: 3000 });
           isOnline = true;
-          // Get session uptime
+          source = 'tmux';
           const startTime = execSync(`tmux display-message -t ${agent.tmux} -p '#{session_created}'`, {
             encoding: 'utf8', timeout: 3000,
           }).trim();
@@ -1076,7 +1078,35 @@ const server = http.createServer((req, res) => {
             uptime = Math.floor((Date.now() / 1000) - parseInt(startTime));
           }
         } catch (e) {
-          isOnline = false;
+          // tmux session 不存在
+        }
+      }
+
+      // 方式2: 检查是否有该 Agent 的活跃会话（最近5分钟有更新）
+      if (!isOnline) {
+        try {
+          const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+          if (fs.existsSync(sessionsDir)) {
+            const files = fs.readdirSync(sessionsDir)
+              .filter(f => f.includes(agentId) && f.endsWith('.json'))
+              .map(f => ({
+                name: f,
+                mtime: fs.statSync(path.join(sessionsDir, f)).mtime,
+              }))
+              .sort((a, b) => b.mtime - a.mtime);
+
+            if (files.length > 0) {
+              const lastActivity = files[0].mtime.getTime();
+              const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+              if (lastActivity > fiveMinutesAgo) {
+                isOnline = true;
+                source = 'session';
+                uptime = Math.floor((Date.now() - lastActivity) / 1000);
+              }
+            }
+          }
+        } catch (e) {
+          // 检查失败
         }
       }
 
@@ -1085,6 +1115,7 @@ const server = http.createServer((req, res) => {
         id: agentId,
         status: isOnline ? 'online' : 'offline',
         uptime,
+        source, // 状态来源：tmux, session, none
         tmux: agent.tmux || null,
       }));
     } catch (err) {
