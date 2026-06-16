@@ -8,6 +8,188 @@ const API_HOST = 'localhost';
 const API_PORT = 8642;
 const PROXY_PORT = 3001;
 
+// ===== 会话压缩功能 =====
+
+const COMPRESS_THRESHOLD = 80;  // 压缩阈值（百分比）
+const KEEP_RECENT_MESSAGES = 20;  // 保留最近消息数
+const MAX_SUMMARY_TOKENS = 1000;  // 摘要最大 token 数
+const CONTEXT_LIMIT = 1000000;  // 上下文限制（1M tokens）
+
+// Token 估算（中文 1 token ≈ 2 字符，英文 1 token ≈ 4 字符）
+function estimateTokens(text) {
+  if (!text) return 0;
+  const chineseChars = (text.match(/[一-龥]/g) || []).length;
+  const otherChars = text.length - chineseChars;
+  return Math.ceil(chineseChars / 2 + otherChars / 4);
+}
+
+// 获取上下文使用情况
+function getContextUsage(messages) {
+  const totalTokens = messages.reduce((sum, msg) =>
+    sum + estimateTokens(msg.content || ''), 0);
+  return {
+    totalTokens,
+    usagePercent: (totalTokens / CONTEXT_LIMIT) * 100
+  };
+}
+
+// 生成会话摘要
+async function generateSummary(messages) {
+  return new Promise((resolve, reject) => {
+    const prompt = `请将以下对话历史压缩为简洁的摘要，保留：
+1. 关键决策和结论
+2. 重要的代码修改
+3. 未完成的任务
+4. 文件路径和配置变更
+
+对话历史：
+${JSON.stringify(messages.map(m => ({
+      role: m.role,
+      content: (m.content || '').substring(0, 500)
+    })), null, 2)}`;
+
+    const requestData = JSON.stringify({
+      messages: [
+        {
+          role: 'system',
+          content: '你是一个会话摘要生成器。请将对话历史压缩为简洁的摘要，保留关键信息。'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_tokens: MAX_SUMMARY_TOKENS,
+      temperature: 0.3
+    });
+
+    const options = {
+      hostname: API_HOST,
+      port: API_PORT,
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(requestData)
+      }
+    };
+
+    const req = http.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try {
+          const response = JSON.parse(data);
+          if (response.choices && response.choices[0]) {
+            resolve(response.choices[0].message.content);
+          } else {
+            reject(new Error('Invalid response format'));
+          }
+        } catch (err) {
+          reject(err);
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.write(requestData);
+    req.end();
+  });
+}
+
+// 压缩会话
+async function compressSession(sessionId, messages) {
+  console.log(`[压缩] 开始压缩会话 ${sessionId}，共 ${messages.length} 条消息`);
+
+  // 1. 保留最近的消息
+  const recentMessages = messages.slice(-KEEP_RECENT_MESSAGES);
+  const oldMessages = messages.slice(0, -KEEP_RECENT_MESSAGES);
+
+  if (oldMessages.length === 0) {
+    console.log('[压缩] 没有需要压缩的旧消息');
+    return messages;
+  }
+
+  try {
+    // 2. 生成旧消息的摘要
+    const summary = await generateSummary(oldMessages);
+    console.log(`[压缩] 摘要生成完成，长度: ${summary.length} 字符`);
+
+    // 3. 创建摘要消息
+    const summaryMessage = {
+      role: 'system',
+      content: `[会话历史摘要 - 已压缩 ${oldMessages.length} 条消息]\n\n${summary}\n\n[最近消息开始]`,
+      timestamp: Date.now()
+    };
+
+    // 4. 合并消息
+    const compressedMessages = [summaryMessage, ...recentMessages];
+    console.log(`[压缩] 压缩完成，从 ${messages.length} 条减少到 ${compressedMessages.length} 条`);
+
+    return compressedMessages;
+  } catch (err) {
+    console.error('[压缩] 生成摘要失败:', err.message);
+    return messages;  // 失败时返回原消息
+  }
+}
+
+// 检查并压缩会话
+async function checkAndCompressSession(sessionId) {
+  try {
+    const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+    const files = fs.readdirSync(sessionsDir)
+      .filter(f => f.includes(sessionId) && f.endsWith('.json') && !f.includes('request_'));
+
+    if (files.length === 0) return null;
+
+    const sessionFile = path.join(sessionsDir, files[0]);
+    const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+    const messages = data.messages || [];
+
+    // 检查上下文使用率
+    const { usagePercent } = getContextUsage(messages);
+    console.log(`[压缩] 会话 ${sessionId} 上下文使用率: ${usagePercent.toFixed(1)}%`);
+
+    // 如果超过阈值，触发压缩
+    if (usagePercent > COMPRESS_THRESHOLD) {
+      console.log(`[压缩] 使用率超过 ${COMPRESS_THRESHOLD}%，开始压缩...`);
+
+      // 检查是否已经压缩过（避免重复压缩）
+      if (data._compressed) {
+        const timeSinceCompression = Date.now() - data._compressed;
+        if (timeSinceCompression < 300000) {  // 5 分钟内不重复压缩
+          console.log('[压缩] 最近已压缩，跳过');
+          return null;
+        }
+      }
+
+      // 执行压缩
+      const compressedMessages = await compressSession(sessionId, messages);
+
+      // 保存压缩后的会话
+      data.messages = compressedMessages;
+      data._compressed = Date.now();
+      data._compressionCount = (data._compressionCount || 0) + 1;
+
+      fs.writeFileSync(sessionFile, JSON.stringify(data, null, 2));
+      console.log('[压缩] 压缩后的会话已保存');
+
+      return {
+        compressed: true,
+        before: messages.length,
+        after: compressedMessages.length,
+        usageBefore: usagePercent,
+        usageAfter: getContextUsage(compressedMessages).usagePercent
+      };
+    }
+
+    return null;  // 不需要压缩
+  } catch (err) {
+    console.error('[压缩] 检查会话失败:', err.message);
+    return null;
+  }
+}
+
 // 会话搜索（调用 Python 脚本）
 function searchSessionsFromDb(query, limit = 10) {
   try {
@@ -1240,6 +1422,60 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // Handle session compression status endpoint
+  if (req.url.match(/^\/api\/sessions\/[^/]+\/compression$/)) {
+    const sessionId = req.url.split('/')[3];
+    try {
+      const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
+      const files = fs.readdirSync(sessionsDir)
+        .filter(f => f.includes(sessionId) && f.endsWith('.json') && !f.includes('request_'));
+
+      if (files.length === 0) {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Session not found' }));
+        return;
+      }
+
+      const sessionFile = path.join(sessionsDir, files[0]);
+      const data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+      const messages = data.messages || [];
+      const { totalTokens, usagePercent } = getContextUsage(messages);
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        sessionId,
+        messageCount: messages.length,
+        totalTokens,
+        usagePercent: Math.round(usagePercent * 10) / 10,
+        compressed: data._compressed || null,
+        compressionCount: data._compressionCount || 0,
+        threshold: COMPRESS_THRESHOLD
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  // Handle manual compression endpoint
+  if (req.url.match(/^\/api\/sessions\/[^/]+\/compress$/) && req.method === 'POST') {
+    const sessionId = req.url.split('/')[3];
+    checkAndCompressSession(sessionId).then(result => {
+      if (result) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ compressed: false, message: '不需要压缩' }));
+      }
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    });
+    return;
+  }
+
   // Remove Origin header to avoid CORS issues
   const headers = { ...req.headers };
   delete headers.origin;
@@ -1251,6 +1487,16 @@ const server = http.createServer((req, res) => {
     const currentSessionId = getCurrentSessionId();
     if (currentSessionId) {
       headers['x-hermes-session-id'] = currentSessionId;
+
+      // 异步检查并压缩会话（不阻塞请求）
+      checkAndCompressSession(currentSessionId).then(result => {
+        if (result) {
+          console.log(`[压缩] 会话已压缩: ${result.before} → ${result.after} 条消息`);
+          console.log(`[压缩] 上下文使用率: ${result.usageBefore.toFixed(1)}% → ${result.usageAfter.toFixed(1)}%`);
+        }
+      }).catch(err => {
+        console.error('[压缩] 压缩失败:', err.message);
+      });
     }
   }
 
