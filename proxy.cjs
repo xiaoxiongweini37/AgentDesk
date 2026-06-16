@@ -1183,7 +1183,7 @@ const server = http.createServer((req, res) => {
         console.log(`[Agent] ${agentId} 已在 tmux session "${tmuxSessionName}" 中启动`);
 
         // 等待一下让 Agent 初始化
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        execSync('sleep 2');
 
         // 检查是否启动成功
         let isRunning = false;
