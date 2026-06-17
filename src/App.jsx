@@ -273,7 +273,7 @@ function App() {
       />
 
       {/* 任务状态显示 */}
-      {currentTask && (
+      {(currentTask || taskResult) && (
         <div
           className="animate-slide-up"
           style={{
@@ -290,7 +290,9 @@ function App() {
             padding: '16px 24px',
             boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
             minWidth: 300,
-            maxWidth: 500,
+            maxWidth: 600,
+            maxHeight: 400,
+            overflowY: 'auto',
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
@@ -302,23 +304,55 @@ function App() {
             <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
               {taskStatus === 'executing' ? '正在执行任务' :
                taskStatus === 'completing' ? '正在完成任务' :
-               taskStatus === 'failed' ? '任务失败' : '准备执行任务'}
+               taskStatus === 'failed' ? '任务失败' : '任务完成'}
             </span>
+            <button
+              onClick={() => setTaskResult(null)}
+              style={{
+                marginLeft: 'auto',
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: 16,
+              }}
+            >
+              ✕
+            </button>
           </div>
 
-          <div style={{ color: 'var(--text-primary)', fontSize: 13, marginBottom: 8 }}>
-            {currentTask.title}
-          </div>
+          {currentTask && (
+            <div style={{ color: 'var(--text-primary)', fontSize: 13, marginBottom: 8 }}>
+              📋 {currentTask.title}
+            </div>
+          )}
 
           {taskStatus === 'executing' && (
             <div style={{ fontSize: 12, color: 'var(--accent-light)' }}>
-              Agent 正在处理中...
+              ⏳ Agent 正在处理中...
             </div>
           )}
 
           {taskResult && (
-            <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 8 }}>
-              ✅ 任务已完成
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--success)', marginBottom: 8 }}>
+                ✅ 任务已完成
+              </div>
+              <div style={{
+                fontSize: 12,
+                color: 'var(--text-primary)',
+                background: 'var(--glass-bg)',
+                padding: '10px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: '1px solid var(--glass-border)',
+                maxHeight: 200,
+                overflowY: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+              }}>
+                {taskResult.output || '无输出'}
+              </div>
             </div>
           )}
 

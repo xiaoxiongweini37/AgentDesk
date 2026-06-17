@@ -78,7 +78,12 @@ export function useAgentTaskProcessor(agentId, wsLastMessage) {
         status: 'completed',
       }])
 
-      setCurrentTask(null)
+      // 保持结果显示 30 秒，然后清除
+      setTimeout(() => {
+        setCurrentTask(null)
+        setTaskResult(null)
+      }, 30000)
+
       console.log('[TaskProcessor] 任务完成:', taskDetail.id)
 
     } catch (error) {
