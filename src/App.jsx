@@ -15,6 +15,7 @@ import { useHermes } from './hooks/useHermes'
 import { useSessions } from './hooks/useSessions'
 import { useAgentSelector } from './hooks/useAgentSelector'
 import { useWebSocket } from './hooks/useWebSocket'
+import { useAgentTaskProcessor } from './hooks/useAgentTaskProcessor'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
@@ -48,6 +49,16 @@ function App() {
     lastMessage: wsLastMessage,
     notifications: wsNotifications,
   } = useWebSocket(selectedAgentId)
+
+  // Agent 任务处理器
+  const {
+    currentTask,
+    taskStatus,
+    taskResult,
+    taskError,
+    taskHistory,
+    processNextTask,
+  } = useAgentTaskProcessor(selectedAgentId, wsLastMessage)
 
   // 调试信息
   useEffect(() => {
@@ -260,6 +271,64 @@ function App() {
         isOpen={showCollaborationFlow}
         onClose={() => setShowCollaborationFlow(false)}
       />
+
+      {/* 任务状态显示 */}
+      {currentTask && (
+        <div
+          className="animate-slide-up"
+          style={{
+            position: 'fixed',
+            top: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1100,
+            background: 'var(--glass-bg)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '16px 24px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+            minWidth: 300,
+            maxWidth: 500,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 20 }}>
+              {taskStatus === 'executing' ? '⚡' :
+               taskStatus === 'completing' ? '✅' :
+               taskStatus === 'failed' ? '❌' : '⏳'}
+            </span>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
+              {taskStatus === 'executing' ? '正在执行任务' :
+               taskStatus === 'completing' ? '正在完成任务' :
+               taskStatus === 'failed' ? '任务失败' : '准备执行任务'}
+            </span>
+          </div>
+
+          <div style={{ color: 'var(--text-primary)', fontSize: 13, marginBottom: 8 }}>
+            {currentTask.title}
+          </div>
+
+          {taskStatus === 'executing' && (
+            <div style={{ fontSize: 12, color: 'var(--accent-light)' }}>
+              Agent 正在处理中...
+            </div>
+          )}
+
+          {taskResult && (
+            <div style={{ fontSize: 12, color: 'var(--success)', marginTop: 8 }}>
+              ✅ 任务已完成
+            </div>
+          )}
+
+          {taskError && (
+            <div style={{ fontSize: 12, color: 'var(--error)', marginTop: 8 }}>
+              ❌ {taskError}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 任务通知 */}
       {taskNotification && (
