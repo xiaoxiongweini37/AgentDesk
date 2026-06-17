@@ -5,6 +5,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 const { getAvailableCliTypes, getCliConfig, buildStartCommand, isCliAvailable, CLI_REGISTRY } = require('./cli_registry.cjs');
+const WebSocket = require('ws');
 
 const API_HOST = 'localhost';
 const API_PORT = 8642;
@@ -1016,6 +1017,24 @@ const server = http.createServer((req, res) => {
         task.updatedAt = Date.now()
 
         console.log(`[Task] 任务已分配: ${taskId} → ${agentId}`)
+
+        // 通过 WebSocket 通知 Agent
+        const notified = sendToAgent(agentId, {
+          type: 'task_assigned',
+          task: {
+            id: task.id,
+            title: task.title,
+            description: task.description,
+            priority: task.priority,
+          },
+          message: `新任务: ${task.title}`,
+        })
+
+        if (notified) {
+          console.log(`[WebSocket] 已通知 Agent ${agentId}`)
+        } else {
+          console.log(`[WebSocket] Agent ${agentId} 未连接，任务已保存`)
+        }
 
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(task))
@@ -2422,6 +2441,77 @@ const server = http.createServer((req, res) => {
 
   req.pipe(proxyReq, { end: true });
 });
+
+// ===== WebSocket 服务器 =====
+const wss = new WebSocket.Server({ server });
+
+// 存储 Agent 连接
+const agentConnections = new Map(); // agentId -> WebSocket
+
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const agentId = url.searchParams.get('agentId');
+
+  if (agentId) {
+    // Agent 连接
+    agentConnections.set(agentId, ws);
+    console.log(`[WebSocket] Agent ${agentId} 已连接`);
+
+    // 发送欢迎消息
+    ws.send(JSON.stringify({
+      type: 'connected',
+      agentId,
+      message: `欢迎 ${agentId}，等待任务...`,
+    }));
+
+    // 连接关闭时清理
+    ws.on('close', () => {
+      agentConnections.delete(agentId);
+      console.log(`[WebSocket] Agent ${agentId} 已断开`);
+    });
+
+    // 心跳检测
+    ws.isAlive = true;
+    ws.on('pong', () => { ws.isAlive = true; });
+  } else {
+    // 普通客户端连接
+    console.log('[WebSocket] 客户端已连接');
+
+    ws.on('close', () => {
+      console.log('[WebSocket] 客户端已断开');
+    });
+  }
+});
+
+// 心跳检测（每 30 秒）
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (!ws.isAlive) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
+
+// 向指定 Agent 发送消息
+function sendToAgent(agentId, message) {
+  const ws = agentConnections.get(agentId);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(message));
+    return true;
+  }
+  return false;
+}
+
+// 向所有 Agent 广播消息
+function broadcastToAgents(message) {
+  agentConnections.forEach((ws, agentId) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(message));
+    }
+  });
+}
+
+console.log('[WebSocket] 服务器已启动');
 
 server.listen(PROXY_PORT, () => {
   console.log(`Proxy server running on http://localhost:${PROXY_PORT}`);

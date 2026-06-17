@@ -14,6 +14,7 @@ import DevTools from './components/DevTools'
 import { useHermes } from './hooks/useHermes'
 import { useSessions } from './hooks/useSessions'
 import { useAgentSelector } from './hooks/useAgentSelector'
+import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
   const [activeTab, setActiveTab] = useState('chat')
@@ -24,6 +25,7 @@ function App() {
   const [showMessagePanel, setShowMessagePanel] = useState(false)
   const [showTaskPanel, setShowTaskPanel] = useState(false)
   const [showCollaborationFlow, setShowCollaborationFlow] = useState(false)
+  const [taskNotification, setTaskNotification] = useState(null)
 
   // Agent 选择器
   const {
@@ -40,12 +42,32 @@ function App() {
     refreshStatus,
   } = useAgentSelector()
 
+  // WebSocket 连接
+  const {
+    connected: wsConnected,
+    lastMessage: wsLastMessage,
+    notifications: wsNotifications,
+  } = useWebSocket(selectedAgentId)
+
   // 调试信息
   useEffect(() => {
     console.log('[App] agents:', agents)
     console.log('[App] selectedAgentId:', selectedAgentId)
     console.log('[App] agents.length:', agents.length)
   }, [agents, selectedAgentId])
+
+  // 处理 WebSocket 消息
+  useEffect(() => {
+    if (wsLastMessage && wsLastMessage.type === 'task_assigned') {
+      // 收到任务通知
+      setTaskNotification(wsLastMessage)
+
+      // 3 秒后自动消失
+      setTimeout(() => {
+        setTaskNotification(null)
+      }, 5000)
+    }
+  }, [wsLastMessage])
 
   // 将选中的 Agent 配置传递给 useHermes
   const { sendMessageStream, isLoading, error, streamingText } = useHermes(selectedAgent)
@@ -238,6 +260,81 @@ function App() {
         isOpen={showCollaborationFlow}
         onClose={() => setShowCollaborationFlow(false)}
       />
+
+      {/* 任务通知 */}
+      {taskNotification && (
+        <div
+          className="animate-slide-up"
+          style={{
+            position: 'fixed',
+            top: 20,
+            right: 20,
+            zIndex: 1100,
+            background: 'var(--glass-bg)',
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: 'var(--radius-lg)',
+            padding: '16px 20px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+            maxWidth: 350,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: 20 }}>📋</span>
+            <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 14 }}>
+              新任务通知
+            </span>
+          </div>
+          <div style={{ color: 'var(--text-primary)', fontSize: 13, marginBottom: 8 }}>
+            {taskNotification.message}
+          </div>
+          {taskNotification.task && (
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+              优先级: {taskNotification.task.priority}
+            </div>
+          )}
+          <button
+            onClick={() => setTaskNotification(null)}
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* WebSocket 状态指示器 */}
+      <div style={{
+        position: 'fixed',
+        bottom: 10,
+        left: 10,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        padding: '4px 10px',
+        background: 'var(--glass-bg)',
+        borderRadius: 20,
+        fontSize: 11,
+        color: 'var(--text-secondary)',
+      }}>
+        <span style={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          background: wsConnected ? 'var(--success)' : 'var(--error)',
+          boxShadow: wsConnected ? '0 0 6px var(--success)' : 'none',
+        }} />
+        {wsConnected ? 'WS 已连接' : 'WS 未连接'}
+      </div>
 
       {/* 开发者工具 */}
       <DevTools
