@@ -978,6 +978,22 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  // 获取单个任务
+  if (req.url.match(/^\/api\/tasks\/[^/]+$/) && req.method === 'GET') {
+    const taskId = req.url.split('/')[3]
+    const task = tasks.get(taskId)
+
+    if (!task) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '任务不存在' }))
+      return
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(task))
+    return
+  }
+
   // 删除任务
   if (req.url.match(/^\/api\/tasks\/[^/]+$/) && req.method === 'DELETE') {
     const taskId = req.url.split('/')[3]
@@ -1018,8 +1034,8 @@ const server = http.createServer((req, res) => {
 
         console.log(`[Task] 任务已分配: ${taskId} → ${agentId}`)
 
-        // 通过 WebSocket 通知 Agent
-        const notified = sendToAgent(agentId, {
+        // 构建任务通知消息
+        const taskNotification = {
           type: 'task_assigned',
           task: {
             id: task.id,
@@ -1027,11 +1043,18 @@ const server = http.createServer((req, res) => {
             description: task.description,
             priority: task.priority,
           },
+          agentId: agentId,
           message: `新任务: ${task.title}`,
-        })
+        }
+
+        // 通过 WebSocket 通知指定 Agent
+        const notified = sendToAgent(agentId, taskNotification)
+
+        // 同时广播给所有客户端（包括前端）
+        broadcastToAgents(taskNotification)
 
         if (notified) {
-          console.log(`[WebSocket] 已通知 Agent ${agentId}`)
+          console.log(`[WebSocket] 已通知 Agent ${agentId} 和所有客户端`)
         } else {
           console.log(`[WebSocket] Agent ${agentId} 未连接，任务已保存`)
         }

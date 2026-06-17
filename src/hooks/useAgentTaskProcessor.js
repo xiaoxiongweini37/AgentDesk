@@ -21,11 +21,19 @@ export function useAgentTaskProcessor(agentId, wsLastMessage) {
 
   // 监听 WebSocket 消息
   useEffect(() => {
-    if (!wsLastMessage || !agentId) return
+    console.log('[TaskProcessor] wsLastMessage:', wsLastMessage)
+    console.log('[TaskProcessor] agentId:', agentId)
+
+    if (!wsLastMessage || !agentId) {
+      console.log('[TaskProcessor] 跳过: wsLastMessage 或 agentId 为空')
+      return
+    }
 
     if (wsLastMessage.type === 'task_assigned') {
       console.log('[TaskProcessor] 收到任务通知:', wsLastMessage.task)
       handleNewTask(wsLastMessage.task)
+    } else {
+      console.log('[TaskProcessor] 消息类型不是 task_assigned:', wsLastMessage.type)
     }
   }, [wsLastMessage, agentId])
 
@@ -113,12 +121,14 @@ export function useAgentTaskProcessor(agentId, wsLastMessage) {
   const executeTask = useCallback(async (task) => {
     console.log('[TaskProcessor] 执行任务:', task.title)
 
-    // 调用 CLI 执行任务
-    const response = await fetch(`${API_BASE}/api/agents/${agentId}/send`, {
+    // 使用 test/agent API 直接调用 CLI（不需要 Agent 进程运行）
+    const response = await fetch(`${API_BASE}/api/test/agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: `请执行以下任务：\n标题：${task.title}\n描述：${task.description || '无'}\n优先级：${task.priority}`,
+        agentId: agentId,
+        message: `请执行以下任务：\n标题：${task.title}\n描述：${task.description || '无'}\n优先级：${task.priority}\n\n请直接执行这个任务并返回结果。`,
+        cliType: 'claude',
       }),
     })
 
