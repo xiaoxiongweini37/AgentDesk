@@ -1612,10 +1612,9 @@ const server = http.createServer((req, res) => {
           timeout: 60000,
           env: { ...process.env, ...startInfo.env },
           encoding: 'utf-8',
-        }
-
-        if (isWindows) {
-          execOptions.windowsHide = true
+          windowsHide: true,
+          // 设置控制台编码
+          ...(isWindows ? { shell: 'powershell.exe' } : {}),
         }
 
         const childProcess = exec(fullCommand, execOptions, (error, stdout, stderr) => {
