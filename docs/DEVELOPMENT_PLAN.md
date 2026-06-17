@@ -606,29 +606,45 @@ process.stdout.on('data', (data) => {
 **当前阶段**：阶段 5 - UI 增强
 **开始日期**：2026-06-16
 **预计完成**：2026-06-23
-**进度**：0%
+**进度**：30%
 
-- [ ] 任务面板（查看所有任务）
+- [x] 任务面板（查看所有任务）- TaskList 升级为使用后端 API
 - [ ] Agent 监控面板
 - [ ] 消息中心（查看 Agent 间通信）
 - [ ] 日志查看器
 - [ ] 进度可视化
 
-### 已完成（阶段 1、2、3、4 + Agent 通信）
+### 已完成（阶段 1-4 + Agent 通信 + 任务系统）
 
-- [x] MessageBus 核心实现
-- [x] AgentAdapter 基础框架
-- [x] SharedWorkspace 共享工作区
-- [x] TaskManager 任务管理器
-- [x] Orchestrator 编排引擎
-- [x] CollaborationManager 协作管理器
+#### 核心模块
+- [x] MessageBus 消息总线（src/core/MessageBus.js）
+- [x] AgentAdapter 基础框架（src/core/AgentAdapter.js）
+- [x] SharedWorkspace 共享工作区（src/core/SharedWorkspace.js）
+- [x] TaskManager 任务管理器（src/core/TaskManager.js）
+- [x] Orchestrator 编排引擎（src/core/Orchestrator.js）
+- [x] CollaborationManager 协作管理器（src/core/CollaborationManager.js）
+
+#### Agent 通信
 - [x] 真正的 CLI Agent 通信（exec + echo pipe）
+- [x] WebSocket 任务通知系统
+- [x] Agent 任务处理流程
 - [x] 持久化 Agent 进程管理
+
+#### 后端 API
+- [x] 任务管理 API（/api/tasks CRUD）
+- [x] Agent 控制 API（/api/agents/:id/start|stop|send）
+- [x] Agent 状态 API（/api/agents/running）
+- [x] CLI 类型 API（/api/cli-types）
+
+#### 前端 UI
 - [x] 设置页面 Agent 通信界面
-- [x] Agent 间直接通信
-- [x] 协作任务流程
-- [x] 冲突检测和解决
-- [x] 进度同步
+- [x] 开发者工具页面（DevTools.jsx）
+- [x] 任务列表升级（使用后端 API）
+- [x] Dashboard 简化
+- [x] CollaborationFlow 简化
+- [x] WebSocket 状态指示器
+- [x] 任务通知弹窗
+- [x] 任务结果显示
 
 ### 待处理
 

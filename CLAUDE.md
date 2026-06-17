@@ -65,59 +65,50 @@
 
 ## 当前状态
 
-**最后更新**: 2026-06-16
+**最后更新**: 2026-06-17
 
 ### 最近完成的工作
-- 2026-06-16: 添加 Claude 自动压缩机制 (commit: 75487f4)
-  - 创建 .claude/COMPRESSION.md 压缩说明
-  - 创建 .claude/compression-guide.md 压缩指南
-  - 更新 CLAUDE.md 添加压缩触发条件
-  - 定义压缩策略和恢复流程
-  - 支持手动压缩（"保存进度"、"压缩会话"）
 
-- 2026-06-16: 实现会话压缩功能 (commit: 5e7fe7c)
-  - 添加 token 估算函数（中文/英文分别计算）
-  - 添加上下文使用率检测
-  - 添加自动压缩逻辑（阈值 80%）
-  - 添加摘要生成函数（调用本地 AI）
-  - 添加压缩状态 API（GET /api/sessions/:id/compression）
-  - 添加手动压缩 API（POST /api/sessions/:id/compress）
-  - 在聊天请求中异步检查并压缩会话
+#### 2026-06-17: 多 Agent 协作系统核心实现
+- 实现 MessageBus 消息总线（src/core/MessageBus.js）
+- 实现 AgentAdapter 基础框架（src/core/AgentAdapter.js）
+- 实现 SharedWorkspace 共享工作区（src/core/SharedWorkspace.js）
+- 实现 TaskManager 任务管理器（src/core/TaskManager.js）
+- 实现 Orchestrator 编排引擎（src/core/Orchestrator.js）
+- 实现 CollaborationManager 协作管理器（src/core/CollaborationManager.js）
+- 实现真正的 CLI Agent 通信（exec + echo pipe）
+- 实现 WebSocket 任务通知系统
+- 实现 Agent 任务处理流程
+- 添加任务管理 API（/api/tasks）
+- 添加 Agent 控制 API（/api/agents/:id/start|stop|send）
+- 添加开发者工具页面（DevTools.jsx）
+- 修复中文编码问题
 
-- 2026-06-16: Progress 标签页基础改进 (commit: 9609eeb)
-  - 更准确的 token 估算（中文/英文分别计算）
-  - 工具调用统计（显示调用次数）
-  - 添加会话时长统计
-  - 优化 UI 布局和间距
+#### 2026-06-16: 基础功能完善
+- 添加 Claude 自动压缩机制
+- 实现会话压缩功能
+- Progress 标签页基础改进
+- 完善工作目录功能
+- 主题切换系统完善
+- 持久化 session ID
 
-- 2026-06-16: 完善工作目录功能 (commit: 5265e3a)
-  - 添加工作目录 API（GET/POST）
-  - ContextPanel 中显示当前工作目录
-  - 支持切换工作目录（使用文件浏览器）
-  - 创建 mount_manager.py 脚本（Python）
-  - 修复 proxy.cjs 中的 Python 命令（python3 → python）
-  - 修复路由顺序（/api/mounts/context 优先匹配）
-  - 修复 Windows 编码问题（UTF-8 输出）
+#### 2026-06-15: UI 重构
+- 大规模 UI 重构和样式系统优化
+- 引入毛玻璃效果、现代化颜色变量
 
-- 2026-06-15: 大规模 UI 重构和样式系统优化 (commit: 8003aa0)
-  - 重构所有组件：移除冗余注释，简化代码结构
-  - 优化样式系统：引入毛玻璃效果、现代化颜色变量
-  - 净减少 1669 行代码（1418 增，3087 删）
-  - 改进组件可读性和维护性
-  - 添加 CSS 变量系统：--glass-*, --transition-* 等
-
-- 2026-06-11:
-  - 项目基础结构搭建完成
-  - 添加图片粘贴和文件上传功能 (commit: d0cfffd)
-  - 移除重复的"关联文件"部分 (commit: 136109d)
-  - 实现 Agent 设置中的 API key、base URL 和模型编辑功能 (commit: 0270180)
-  - 实现 Agent 配置 UI (commit: 7ebfeac)
+#### 2026-06-11: 项目初始化
+- 项目基础结构搭建
+- 添加图片粘贴和文件上传功能
+- 实现 Agent 配置 UI
 
 ### 正在进行的工作
 - 暂无进行中的任务
 
 ### 待处理任务
-- 待用户指定新任务
+- UI 增强（阶段 5）
+- 高级功能（阶段 6）
+- 持久化存储
+- 更多 Agent 适配器
 
 ### 已知问题
 - 暂无记录
