@@ -126,13 +126,16 @@ export function useAgentTaskProcessor(agentId, wsLastMessage) {
   const executeTask = useCallback(async (task) => {
     console.log('[TaskProcessor] 执行任务:', task.title)
 
+    // 构造任务消息（直接使用标题，避免复杂的格式）
+    const taskMessage = task.title
+
     // 使用 test/agent API 直接调用 CLI（不需要 Agent 进程运行）
     const response = await fetch(`${API_BASE}/api/test/agent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         agentId: agentId,
-        message: `请执行以下任务：\n标题：${task.title}\n描述：${task.description || '无'}\n优先级：${task.priority}\n\n请直接执行这个任务并返回结果。`,
+        message: taskMessage,
         cliType: 'claude',
       }),
     })
