@@ -1593,7 +1593,8 @@ const server = http.createServer((req, res) => {
         if (startInfo.cliType === 'claude') {
           // Claude CLI: 使用文件重定向
           if (isWindows) {
-            fullCommand = `type "${tempFile}" | ${startInfo.command} --session-id ${sessionId}`;
+            // Windows: 使用 PowerShell 执行，确保 UTF-8 编码
+            fullCommand = `powershell -Command "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Content -Path '${tempFile}' -Encoding UTF8 | ${startInfo.command} --session-id ${sessionId}"`;
           } else {
             fullCommand = `cat "${tempFile}" | ${startInfo.command} --session-id ${sessionId}`;
           }
