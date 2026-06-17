@@ -1606,11 +1606,18 @@ const server = http.createServer((req, res) => {
 
         sendEvent({ type: 'status', message: '执行中...' });
 
-        const childProcess = exec(fullCommand, {
+        // Windows 上设置 UTF-8 编码
+        const execOptions = {
           timeout: 60000,
           env: { ...process.env, ...startInfo.env },
           encoding: 'utf-8',
-        }, (error, stdout, stderr) => {
+        }
+
+        if (isWindows) {
+          execOptions.windowsHide = true
+        }
+
+        const childProcess = exec(fullCommand, execOptions, (error, stdout, stderr) => {
           // 清理临时文件
           try {
             fs.unlinkSync(tempFile);
