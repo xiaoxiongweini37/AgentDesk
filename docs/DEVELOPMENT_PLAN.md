@@ -603,15 +603,26 @@ process.stdout.on('data', (data) => {
 
 ### 进行中
 
-**当前阶段**：阶段 3 - 编排引擎
+**当前阶段**：阶段 4 - 多 Agent 协作
 **开始日期**：2026-06-16
 **预计完成**：2026-06-23
 **进度**：0%
 
-- [ ] TaskManager 实现
-- [ ] Orchestrator 核心
-- [ ] 任务分解逻辑
-- [ ] 智能分配算法
+- [ ] Agent 间直接通信
+- [ ] 协作任务流程
+- [ ] 冲突检测和解决
+- [ ] 进度同步
+
+### 已完成（阶段 1、2、3 + Agent 通信）
+
+- [x] MessageBus 核心实现
+- [x] AgentAdapter 基础框架
+- [x] SharedWorkspace 共享工作区
+- [x] TaskManager 任务管理器
+- [x] Orchestrator 编排引擎
+- [x] 真正的 CLI Agent 通信（exec + echo pipe）
+- [x] 持久化 Agent 进程管理
+- [x] 设置页面 Agent 通信界面
 
 ### 待处理
 
