@@ -1932,63 +1932,7 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // Handle tasks endpoint
-  if (req.url === '/api/tasks' && req.method === 'GET') {
-    try {
-      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
-      const result = execSync(`python ${scriptPath} list`, {
-        encoding: 'utf8',
-        timeout: 5000,
-      });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(result);
-    } catch (err) {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end('[]');
-    }
-    return;
-  }
-
-  // Handle create task endpoint
-  if (req.url === '/api/tasks' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
-    req.on('end', () => {
-      try {
-        const task = JSON.parse(body);
-        const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
-        const assigned = task.assigned_to || '';
-        const priority = task.priority || 'normal';
-        const escapedTitle = task.title.replace(/"/g, '\\"');
-        const escapedDesc = (task.description || '').replace(/"/g, '\\"');
-        const result = execSync(`python ${scriptPath} create "${escapedTitle}" "${escapedDesc}" ${assigned} ${priority}`, {
-          encoding: 'utf8',
-          timeout: 10000,
-        });
-        
-        // 如果任务已分配，发送消息通知Agent
-        const taskResult = JSON.parse(result);
-        if (taskResult.assigned_to) {
-          const msgPath = process.env.HOME + '/.hermes/agent-orchestrator/message_bus.py';
-          const msgContent = `新任务: ${task.title}\n${task.description || ''}`;
-          try {
-            execSync(`python ${msgPath} send commander ${taskResult.assigned_to} task "${msgContent.replace(/"/g, '\\"')}" ${priority}`, {
-              encoding: 'utf8', timeout: 5000,
-            });
-          } catch (e) {
-            console.error('Failed to send task notification:', e.message);
-          }
-        }
-        
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(result);
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
-      }
-    });
-    return;
-  }
+  // 旧的任务 API 已移除，使用新的内存存储 API（第 881 行）
 
   // Handle queue summary endpoint
   if (req.url.match(/^\/api\/messages\/queue\/[^/]+$/) && req.method === 'GET') {
@@ -2060,37 +2004,7 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  // Handle update task status
-  if (req.url.match(/^\/api\/tasks\/[^/]+$/) && req.method === 'PUT') {
-    const taskId = req.url.split('/')[3]
-    let body = ''
-    req.on('data', chunk => body += chunk)
-    req.on('end', () => {
-      try {
-        const update = JSON.parse(body)
-        const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py'
-        // 先获取任务，再更新状态
-        if (update.status === 'cancelled') {
-          // cancelled 直接标记为 completed（简单处理）
-          execSync(`python ${scriptPath} complete ${taskId} "cancelled"`, { encoding: 'utf8', timeout: 5000 })
-        } else if (update.status === 'assigned') {
-          execSync(`python ${scriptPath} assign ${taskId} worker`, { encoding: 'utf8', timeout: 5000 })
-        } else if (update.status === 'in_progress') {
-          execSync(`python ${scriptPath} start ${taskId}`, { encoding: 'utf8', timeout: 5000 })
-        } else if (update.status === 'completed') {
-          execSync(`python ${scriptPath} complete ${taskId}`, { encoding: 'utf8', timeout: 5000 })
-        } else if (update.status === 'failed') {
-          execSync(`python ${scriptPath} complete ${taskId} "failed"`, { encoding: 'utf8', timeout: 5000 })
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ success: true }))
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: err.message }))
-      }
-    })
-    return
-  }
+  // 旧的任务更新 API 已移除，使用新的内存存储 API（第 940 行）
 
   // Handle agent status endpoint
   if (req.url === '/api/agents/status' && req.method === 'GET') {
@@ -2188,22 +2102,7 @@ const server = http.createServer((req, res) => {
     return
   }
 
-  // Handle auto-assign tasks endpoint
-  if (req.url === '/api/tasks/auto-assign' && req.method === 'POST') {
-    try {
-      const scriptPath = process.env.HOME + '/.hermes/agent-orchestrator/task_manager.py';
-      const result = execSync(`python ${scriptPath} auto-assign`, {
-        encoding: 'utf8',
-        timeout: 5000,
-      });
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(result);
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: err.message }));
-    }
-    return;
-  }
+  // 旧的自动分配 API 已移除
 
   // Handle agent sessions endpoint
   if (req.url.match(/^\/api\/agents\/[^/]+\/sessions/)) {
