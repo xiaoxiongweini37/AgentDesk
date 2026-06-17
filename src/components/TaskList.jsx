@@ -32,14 +32,16 @@ const PRIORITY_LABELS = {
 
 export default function TaskList() {
   const [tasks, setTasks] = useState([])
+  const [agents, setAgents] = useState([])
   const [newTask, setNewTask] = useState('')
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const listRef = useRef(null)
 
-  // 加载任务
+  // 加载任务和 Agent 列表
   useEffect(() => {
     fetchTasks()
+    fetchAgents()
   }, [])
 
   const fetchTasks = async () => {
@@ -54,6 +56,18 @@ export default function TaskList() {
       console.error('加载任务失败:', err)
     }
     setLoading(false)
+  }
+
+  const fetchAgents = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/agents`)
+      if (res.ok) {
+        const data = await res.json()
+        setAgents(data)
+      }
+    } catch (err) {
+      console.error('加载 Agent 列表失败:', err)
+    }
   }
 
   const addTask = async () => {
@@ -113,6 +127,24 @@ export default function TaskList() {
         }
       },
     })
+  }
+
+  // 分配任务给 Agent
+  const assignTask = async (taskId, agentId) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/tasks/${taskId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId }),
+      })
+
+      if (res.ok) {
+        const updatedTask = await res.json()
+        setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t))
+      }
+    } catch (err) {
+      console.error('分配任务失败:', err)
+    }
   }
 
   // 过滤任务
@@ -257,6 +289,26 @@ export default function TaskList() {
                 }}>
                   {STATUS_LABELS[task.status]}
                 </span>
+
+                {/* 分配给 Agent */}
+                <select
+                  value={task.assignedTo || ''}
+                  onChange={(e) => assignTask(task.id, e.target.value)}
+                  style={{
+                    fontSize: 11, padding: '3px 8px', borderRadius: 10,
+                    background: 'var(--glass-bg)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--text-secondary)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="">未分配</option>
+                  {agents.map(agent => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.name || agent.id}
+                    </option>
+                  ))}
+                </select>
 
                 <button
                   onClick={(e) => deleteTask(e, task.id)}

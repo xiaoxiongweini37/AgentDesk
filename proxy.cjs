@@ -996,6 +996,154 @@ const server = http.createServer((req, res) => {
     return
   }
 
+  // 分配任务给 Agent
+  if (req.url.match(/^\/api\/tasks\/[^/]+\/assign$/) && req.method === 'POST') {
+    const taskId = req.url.split('/')[3]
+    let body = ''
+    req.on('data', chunk => body += chunk)
+    req.on('end', () => {
+      try {
+        const task = tasks.get(taskId)
+        if (!task) {
+          res.writeHead(404, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '任务不存在' }))
+          return
+        }
+
+        const { agentId } = JSON.parse(body)
+        task.assignedTo = agentId
+        task.status = 'assigned'
+        task.updatedAt = Date.now()
+
+        console.log(`[Task] 任务已分配: ${taskId} → ${agentId}`)
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(task))
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+    return
+  }
+
+  // 获取分配给指定 Agent 的任务
+  if (req.url.match(/^\/api\/agents\/[^/]+\/tasks$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[3]
+    const url = new URL(req.url, `http://${req.headers.host}`)
+    const status = url.searchParams.get('status') || 'assigned'
+
+    let agentTasks = Array.from(tasks.values()).filter(t => t.assignedTo === agentId)
+
+    if (status !== 'all') {
+      agentTasks = agentTasks.filter(t => t.status === status)
+    }
+
+    agentTasks.sort((a, b) => b.updatedAt - a.updatedAt)
+
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(agentTasks))
+    return
+  }
+
+  // Agent 获取下一个待处理任务
+  if (req.url.match(/^\/api\/agents\/[^/]+\/tasks\/next$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[3]
+
+    // 找到分配给该 Agent 的下一个待处理任务
+    const nextTask = Array.from(tasks.values())
+      .filter(t => t.assignedTo === agentId && (t.status === 'assigned' || t.status === 'pending'))
+      .sort((a, b) => {
+        // 优先级排序
+        const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 }
+        return priorityOrder[a.priority] - priorityOrder[b.priority]
+      })[0]
+
+    if (nextTask) {
+      // 自动更新状态为进行中
+      nextTask.status = 'in_progress'
+      nextTask.updatedAt = Date.now()
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(nextTask))
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify(null))
+    }
+    return
+  }
+
+  // Agent 报告任务完成
+  if (req.url.match(/^\/api\/agents\/[^/]+\/tasks\/[^/]+\/complete$/) && req.method === 'POST') {
+    const agentId = req.url.split('/')[3]
+    const taskId = req.url.split('/')[5]
+    let body = ''
+    req.on('data', chunk => body += chunk)
+    req.on('end', () => {
+      try {
+        const task = tasks.get(taskId)
+        if (!task) {
+          res.writeHead(404, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '任务不存在' }))
+          return
+        }
+
+        if (task.assignedTo !== agentId) {
+          res.writeHead(403, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '任务未分配给该 Agent' }))
+          return
+        }
+
+        const { result } = JSON.parse(body)
+        task.status = 'completed'
+        task.result = result || '任务已完成'
+        task.completedAt = Date.now()
+        task.updatedAt = Date.now()
+
+        console.log(`[Task] 任务已完成: ${taskId} by ${agentId}`)
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(task))
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+    return
+  }
+
+  // Agent 报告任务失败
+  if (req.url.match(/^\/api\/agents\/[^/]+\/tasks\/[^/]+\/fail$/) && req.method === 'POST') {
+    const agentId = req.url.split('/')[3]
+    const taskId = req.url.split('/')[5]
+    let body = ''
+    req.on('data', chunk => body += chunk)
+    req.on('end', () => {
+      try {
+        const task = tasks.get(taskId)
+        if (!task) {
+          res.writeHead(404, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '任务不存在' }))
+          return
+        }
+
+        const { error } = JSON.parse(body)
+        task.status = 'failed'
+        task.error = error || '任务失败'
+        task.updatedAt = Date.now()
+
+        console.log(`[Task] 任务失败: ${taskId} - ${error}`)
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(task))
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+    return
+  }
+
   // 发送消息给运行中的 Agent
   if (req.url.match(/^\/api\/agents\/[^/]+\/send$/) && req.method === 'POST') {
     const agentId = req.url.split('/')[3];
