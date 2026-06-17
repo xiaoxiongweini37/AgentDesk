@@ -383,6 +383,32 @@ function AgentSettings() {
     setTesting(false)
   }
 
+  const [agentMessage, setAgentMessage] = useState('')
+  const [agentOutput, setAgentOutput] = useState([])
+  const [sendingToAgent, setSendingToAgent] = useState(false)
+  const [agentRunning, setAgentRunning] = useState({})
+
+  // 检查 Agent 运行状态
+  const checkRunningStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/agents/running`)
+      if (res.ok) {
+        const data = await res.json()
+        setAgentRunning(data)
+      }
+    } catch (err) {
+      console.error('检查运行状态失败:', err)
+    }
+  }
+
+  useEffect(() => {
+    if (selectedAgent) {
+      checkRunningStatus()
+      const timer = setInterval(checkRunningStatus, 5000)
+      return () => clearInterval(timer)
+    }
+  }, [selectedAgent])
+
   const handleStartAgent = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/agents/${selectedAgent.id}/start`, {
@@ -392,7 +418,8 @@ function AgentSettings() {
       if (result.error) {
         alert(`❌ 启动失败: ${result.error}`)
       } else {
-        alert(`✅ Agent 已启动！会话 ID: ${result.session_id}`)
+        alert(`✅ ${result.message || 'Agent 已启动！'}`)
+        checkRunningStatus()
         fetchAllStatus()
       }
     } catch (err) {
@@ -406,11 +433,81 @@ function AgentSettings() {
         method: 'POST',
       })
       const result = await res.json()
-      alert(`⏹️ Agent ${result.status === 'stopped' ? '已停止' : '未在运行'}`)
+      alert(`⏹️ ${result.message || 'Agent 已停止'}`)
+      checkRunningStatus()
       fetchAllStatus()
     } catch (err) {
       alert(`❌ 停止失败: ${err.message}`)
     }
+  }
+
+  const handleSendToAgent = async () => {
+    if (!agentMessage.trim() || sendingToAgent) return
+
+    setSendingToAgent(true)
+    setAgentOutput(prev => [...prev, { type: 'user', content: agentMessage }])
+
+    try {
+      const response = await fetch(`${API_BASE}/api/agents/${selectedAgent.id}/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: agentMessage }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        setAgentOutput(prev => [...prev, { type: 'error', content: error.error }])
+        setSendingToAgent(false)
+        return
+      }
+
+      // 读取 SSE 流
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let fullOutput = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value, { stream: true })
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+
+              if (data.type === 'output') {
+                fullOutput += data.content
+                setAgentOutput(prev => {
+                  const newOutput = [...prev]
+                  const lastItem = newOutput[newOutput.length - 1]
+                  if (lastItem && lastItem.type === 'assistant') {
+                    lastItem.content = fullOutput
+                  } else {
+                    newOutput.push({ type: 'assistant', content: fullOutput })
+                  }
+                  return newOutput
+                })
+              } else if (data.type === 'complete') {
+                setAgentOutput(prev => [...prev, { type: 'system', content: '✅ 响应完成' }])
+              } else if (data.type === 'error') {
+                setAgentOutput(prev => [...prev, { type: 'error', content: data.message || data.content }])
+              }
+            } catch (e) {
+              // 忽略解析错误
+            }
+          }
+        }
+      }
+
+      setAgentMessage('')
+    } catch (err) {
+      setAgentOutput(prev => [...prev, { type: 'error', content: err.message }])
+    }
+
+    setSendingToAgent(false)
   }
 
   const handleLoadLogs = async () => {
@@ -659,6 +756,88 @@ function AgentSettings() {
                   </div>
                 ))
               )}
+            </div>
+          )}
+
+          {/* Agent 通信面板 */}
+          {agentRunning[selectedAgent.id] && (
+            <div className="glass-card" style={{ marginTop: 16, padding: '12px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>
+                  💬 与 Agent 对话
+                </span>
+                <span style={{
+                  fontSize: 11,
+                  padding: '2px 8px',
+                  borderRadius: 10,
+                  background: agentRunning[selectedAgent.id]?.status === 'running' ? 'var(--success)' : 'var(--warning)',
+                  color: '#fff',
+                }}>
+                  {agentRunning[selectedAgent.id]?.status === 'running' ? '🟢 运行中' : '⏳ 启动中'}
+                </span>
+              </div>
+
+              {/* 输出区域 */}
+              <div style={{
+                maxHeight: 200,
+                overflowY: 'auto',
+                marginBottom: 12,
+                padding: 8,
+                background: 'rgba(0,0,0,0.2)',
+                borderRadius: 'var(--radius-sm)',
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+                fontSize: 12,
+                lineHeight: 1.6,
+              }}>
+                {agentOutput.length === 0 ? (
+                  <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: 12 }}>
+                    发送消息与 Agent 对话
+                  </div>
+                ) : (
+                  agentOutput.map((item, i) => (
+                    <div key={i} style={{
+                      marginBottom: 4,
+                      color: item.type === 'error' ? 'var(--error)' :
+                             item.type === 'user' ? 'var(--accent-light)' :
+                             item.type === 'system' ? 'var(--success)' :
+                             'var(--text-primary)',
+                    }}>
+                      {item.type === 'user' && <span style={{ fontWeight: 600 }}>👤 你: </span>}
+                      {item.type === 'assistant' && <span style={{ fontWeight: 600 }}>🤖 Agent: </span>}
+                      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', display: 'inline' }}>{item.content}</pre>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* 输入区域 */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={agentMessage}
+                  onChange={e => setAgentMessage(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSendToAgent() }}
+                  placeholder="输入消息..."
+                  className="glass-input"
+                  style={{ flex: 1, fontSize: 13 }}
+                  disabled={sendingToAgent}
+                />
+                <button
+                  onClick={handleSendToAgent}
+                  disabled={!agentMessage.trim() || sendingToAgent}
+                  className="glass-btn-primary"
+                  style={{
+                    padding: '8px 16px',
+                    border: 'none',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: 13,
+                    color: '#fff',
+                    cursor: sendingToAgent ? 'not-allowed' : 'pointer',
+                    opacity: sendingToAgent ? 0.7 : 1,
+                  }}
+                >
+                  {sendingToAgent ? '⏳' : '📤 发送'}
+                </button>
+              </div>
             </div>
           )}
         </div>

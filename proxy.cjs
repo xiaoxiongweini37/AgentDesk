@@ -664,6 +664,173 @@ function getAgentList() {
   }));
 }
 
+// ===== Agent 进程管理器 =====
+// 管理持久化的 CLI Agent 进程
+
+const agentProcesses = new Map(); // agentId -> { process, sessionId, status, output }
+
+// 启动持久化 Agent 进程
+function startAgentProcess(agentId, agent) {
+  const sessionId = generateUUID();
+  const startInfo = buildStartCommand(agent, sessionId);
+
+  console.log(`[AgentManager] 启动 ${agentId}，CLI: ${startInfo.cliType}，Session: ${sessionId}`);
+
+  const { spawn } = require('child_process');
+  const env = { ...process.env, ...startInfo.env };
+
+  // 使用 spawn 启动进程，保持 stdin/stdout 管道
+  const childProcess = spawn(startInfo.command, startInfo.args, {
+    env,
+    shell: true,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+
+  const agentInfo = {
+    process: childProcess,
+    sessionId,
+    cliType: startInfo.cliType,
+    cliName: startInfo.cliName,
+    status: 'starting',
+    output: [],
+    lastActivity: Date.now(),
+    startTime: Date.now(),
+  };
+
+  // 监听 stdout
+  childProcess.stdout.on('data', (data) => {
+    const text = data.toString();
+    agentInfo.output.push({ type: 'stdout', content: text, timestamp: Date.now() });
+    agentInfo.lastActivity = Date.now();
+
+    // 限制输出历史长度
+    if (agentInfo.output.length > 1000) {
+      agentInfo.output = agentInfo.output.slice(-500);
+    }
+
+    // 如果还在 starting 状态，检测就绪信号
+    if (agentInfo.status === 'starting') {
+      if (text.includes('>') || text.includes('$') || text.includes('Ready') || text.length > 0) {
+        agentInfo.status = 'running';
+        console.log(`[AgentManager] ${agentId} 已就绪`);
+      }
+    }
+
+    console.log(`[AgentManager] ${agentId} stdout:`, text.substring(0, 100));
+  });
+
+  // 监听 stderr
+  childProcess.stderr.on('data', (data) => {
+    const text = data.toString();
+    agentInfo.output.push({ type: 'stderr', content: text, timestamp: Date.now() });
+    console.log(`[AgentManager] ${agentId} stderr:`, text.substring(0, 100));
+  });
+
+  // 进程退出
+  childProcess.on('exit', (code) => {
+    console.log(`[AgentManager] ${agentId} 退出，代码: ${code}`);
+    agentInfo.status = 'stopped';
+    agentInfo.exitCode = code;
+  });
+
+  // 进程错误
+  childProcess.on('error', (error) => {
+    console.error(`[AgentManager] ${agentId} 错误:`, error.message);
+    agentInfo.status = 'error';
+    agentInfo.error = error.message;
+  });
+
+  agentProcesses.set(agentId, agentInfo);
+
+  return agentInfo;
+}
+
+// 发送消息给运行中的 Agent
+function sendMessageToAgent(agentId, message) {
+  const agentInfo = agentProcesses.get(agentId);
+
+  if (!agentInfo) {
+    return { error: 'Agent 未启动' };
+  }
+
+  if (agentInfo.status !== 'running' && agentInfo.status !== 'starting') {
+    return { error: `Agent 状态异常: ${agentInfo.status}` };
+  }
+
+  try {
+    agentInfo.process.stdin.write(message + '\n');
+    agentInfo.lastActivity = Date.now();
+    return { success: true, message: '消息已发送' };
+  } catch (error) {
+    return { error: error.message };
+  }
+}
+
+// 获取 Agent 输出
+function getAgentOutput(agentId, since = 0) {
+  const agentInfo = agentProcesses.get(agentId);
+
+  if (!agentInfo) {
+    return { error: 'Agent 未启动' };
+  }
+
+  const filteredOutput = agentInfo.output.filter(o => o.timestamp > since);
+
+  return {
+    status: agentInfo.status,
+    sessionId: agentInfo.sessionId,
+    cliType: agentInfo.cliType,
+    output: filteredOutput,
+    lastActivity: agentInfo.lastActivity,
+    uptime: Date.now() - agentInfo.startTime,
+  };
+}
+
+// 停止 Agent 进程
+function stopAgentProcess(agentId) {
+  const agentInfo = agentProcesses.get(agentId);
+
+  if (!agentInfo) {
+    return { error: 'Agent 未启动' };
+  }
+
+  try {
+    agentInfo.process.stdin.write('/exit\n');
+
+    setTimeout(() => {
+      if (agentInfo.process && !agentInfo.process.killed) {
+        agentInfo.process.kill();
+      }
+    }, 3000);
+
+    agentInfo.status = 'stopping';
+    return { success: true, message: '正在停止...' };
+  } catch (error) {
+    agentInfo.process.kill();
+    agentInfo.status = 'stopped';
+    return { success: true, message: '已强制停止' };
+  }
+}
+
+// 获取所有 Agent 状态
+function getAllAgentStatus() {
+  const statuses = {};
+
+  for (const [agentId, info] of agentProcesses) {
+    statuses[agentId] = {
+      status: info.status,
+      sessionId: info.sessionId,
+      cliType: info.cliType,
+      cliName: info.cliName,
+      lastActivity: info.lastActivity,
+      uptime: Date.now() - info.startTime,
+      outputCount: info.output.length,
+    };
+  }
+
+  return statuses;
+}
+
 const server = http.createServer((req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -682,6 +849,127 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ status: 'ok', platform: 'hermes-agent' }));
     return;
   }
+
+  // ===== Agent 进程管理 API =====
+
+  // 获取所有 Agent 运行状态
+  if (req.url === '/api/agents/running' && req.method === 'GET') {
+    const statuses = getAllAgentStatus();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(statuses));
+    return;
+  }
+
+  // 发送消息给运行中的 Agent（SSE 流式响应）
+  if (req.url.match(/^\/api\/agents\/[^/]+\/send$/) && req.method === 'POST') {
+    const agentId = req.url.split('/')[3];
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      try {
+        const { message } = JSON.parse(body);
+
+        // 检查 Agent 是否已启动
+        const agentInfo = agentProcesses.get(agentId);
+        if (!agentInfo) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Agent 未启动，请先启动 Agent' }));
+          return;
+        }
+
+        if (agentInfo.status !== 'running') {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Agent 状态: ${agentInfo.status}，无法发送消息` }));
+          return;
+        }
+
+        // 设置 SSE 响应
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        });
+
+        const sendEvent = (data) => {
+          res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        // 记录发送前的输出数量
+        const outputBefore = agentInfo.output.length;
+        let lastOutputTime = Date.now();
+
+        // 发送消息
+        const result = sendMessageToAgent(agentId, message);
+        if (result.error) {
+          sendEvent({ type: 'error', message: result.error });
+          res.end();
+          return;
+        }
+
+        sendEvent({ type: 'status', message: '消息已发送，等待响应...' });
+
+        // 轮询新输出
+        const pollInterval = setInterval(() => {
+          const newOutput = agentInfo.output.slice(outputBefore);
+
+          if (newOutput.length > 0) {
+            const latestOutput = newOutput[newOutput.length - 1];
+            sendEvent({ type: 'output', content: latestOutput.content });
+            lastOutputTime = Date.now();
+          }
+
+          // 检查是否完成（3秒无新输出）
+          const timeSinceLastOutput = Date.now() - lastOutputTime;
+          if (timeSinceLastOutput > 3000 && agentInfo.output.length > outputBefore) {
+            clearInterval(pollInterval);
+
+            // 收集所有新输出
+            const allNewOutput = agentInfo.output.slice(outputBefore)
+              .map(o => o.content)
+              .join('');
+
+            sendEvent({
+              type: 'complete',
+              output: allNewOutput,
+            });
+            res.end();
+          }
+        }, 200);
+
+        // 超时处理
+        setTimeout(() => {
+          clearInterval(pollInterval);
+          sendEvent({ type: 'timeout', message: '等待响应超时' });
+          res.end();
+        }, 60000);
+
+      } catch (error) {
+        if (!res.headersSent) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: error.message }));
+        }
+      }
+    });
+    return;
+  }
+
+  // 获取 Agent 输出
+  if (req.url.match(/^\/api\/agents\/[^/]+\/output$/) && req.method === 'GET') {
+    const agentId = req.url.split('/')[3];
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const since = parseInt(url.searchParams.get('since') || '0');
+
+    const result = getAgentOutput(agentId, since);
+    if (result.error) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    }
+    return;
+  }
+
   // Handle file upload (read content)
   if (req.url === '/api/files/read' && req.method === 'POST') {
     let body = '';
@@ -1292,217 +1580,54 @@ const server = http.createServer((req, res) => {
         return;
       }
 
-      // 检查是否已有 tmux session 在运行
-      if (agent.tmux) {
-        try {
-          execSync(`tmux has-session -t ${agent.tmux}`, { timeout: 3000 });
-          // session 已存在
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            status: 'already_running',
-            message: `Agent ${agentId} 已在 tmux session "${agent.tmux}" 中运行`,
-            tmux: agent.tmux,
-          }));
-          return;
-        } catch (e) {
-          // session 不存在，继续启动
-        }
-      }
-
-      // 创建新的 session ID（使用 UUID 格式，兼容 Claude CLI 等工具）
-      const sessionId = generateUUID();
-      const tmuxSessionName = agent.tmux || `agent-${agentId}`;
-
-      // 使用 CLI 注册表构建启动命令
-      const startInfo = buildStartCommand(agent, sessionId);
-      console.log(`[Agent] 启动 ${agentId}，CLI: ${startInfo.cliName} (${startInfo.cliType})`);
-      console.log(`[Agent] 命令: ${startInfo.fullCommand}`);
-
-      // 检查 CLI 是否可用
-      if (!isCliAvailable(startInfo.cliType)) {
-        // CLI 不可用，回退到会话文件模式
-        console.warn(`[Agent] CLI ${startInfo.cliType} 不可用，回退到会话文件模式`);
-
-        const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
-        if (!fs.existsSync(sessionsDir)) {
-          fs.mkdirSync(sessionsDir, { recursive: true });
-        }
-
-        const sessionFile = path.join(sessionsDir, `session_${sessionId}.json`);
-        const sessionData = {
-          session_id: sessionId,
-          platform: 'agentdesk',
-          agent_id: agentId,
-          cli_type: startInfo.cliType,
-          agent_config: {
-            name: agent.name,
-            base_url: agent.base_url,
-            model: agent.model,
-          },
-          messages: [],
-          created_at: Date.now(),
-          updated_at: Date.now(),
-        };
-        fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
-
+      // 检查是否已在运行
+      const existingInfo = agentProcesses.get(agentId);
+      if (existingInfo && (existingInfo.status === 'running' || existingInfo.status === 'starting')) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          session_id: sessionId,
-          status: 'session_only',
-          cli_type: startInfo.cliType,
-          cli_name: startInfo.cliName,
-          message: `${startInfo.cliName} 未安装，已创建会话文件`,
+          status: 'already_running',
+          message: `Agent ${agentId} 已在运行`,
+          sessionId: existingInfo.sessionId,
+          cliType: existingInfo.cliType,
         }));
         return;
       }
 
-      // 根据平台选择启动方式
-      const isWindows = process.platform === 'win32';
-      let startSuccess = false;
-      let startMethod = '';
-
-      try {
-        if (isWindows) {
-          // Windows: 创建启动脚本，用户手动运行
-          const scriptDir = path.join(os.homedir(), '.hermes', 'scripts');
-          if (!fs.existsSync(scriptDir)) {
-            fs.mkdirSync(scriptDir, { recursive: true });
-          }
-
-          // 构建环境变量设置脚本
-          // 过滤掉包含括号的环境变量（如 CommonProgramFiles(x86)）
-          // 过滤掉系统变量和不需要的变量
-          const envScript = Object.entries(startInfo.env)
-            .filter(([key, value]) => {
-              // 排除条件
-              if (!value) return false;  // 空值
-              if (key === 'PATH') return false;  // PATH 变量
-              if (key.startsWith('_')) return false;  // 下划线开头的变量
-              if (key.includes('(') || key.includes(')')) return false;  // 包含括号的变量
-              if (key.includes('.')) return false;  // 包含点号的变量（如 ShadowBot.1.mutex）
-              if (key.length > 50) return false;  // 过长的变量名
-              return true;
-            })
-            .map(([key, value]) => {
-              // 转义值中的双引号
-              const escapedValue = value.replace(/"/g, '`"');
-              return `$env:${key} = "${escapedValue}"`;
-            })
-            .join('\n');
-
-          const scriptContent = `# Agent 启动脚本 - ${agentId}
-# 生成时间: ${new Date().toLocaleString()}
-# 注意：此脚本仅设置 Agent 需要的环境变量
-
-${envScript}
-
-# 启动命令
-Write-Host "启动 ${startInfo.cliName}..."
-${startInfo.command} ${startInfo.args.join(' ')}
-`;
-
-          const scriptPath = path.join(scriptDir, `start_${agentId}_${sessionId}.ps1`);
-          fs.writeFileSync(scriptPath, scriptContent);
-
-          // 尝试使用 cmd /c start 启动
-          try {
-            const cmdCommand = `cmd /c start powershell -NoExit -ExecutionPolicy Bypass -File "${scriptPath}"`;
-            execSync(cmdCommand, { timeout: 5000, windowsHide: true });
-            startSuccess = true;
-            startMethod = 'cmd';
-            console.log(`[Agent] ${agentId} 已通过 cmd 启动`);
-          } catch (cmdErr) {
-            // 如果 cmd 启动失败，标记为脚本模式
-            console.log(`[Agent] ${agentId} 启动脚本已创建，请手动运行: ${scriptPath}`);
-            startSuccess = true;
-            startMethod = 'script';
-          }
-        } else {
-          // Linux/Mac: 使用 tmux
-          const envParts = [];
-          for (const [key, value] of Object.entries(startInfo.env)) {
-            if (value && key !== 'PATH' && !key.startsWith('_')) {
-              envParts.push(`${key}="${value}"`);
-            }
-          }
-          const fullCommand = envParts.length > 0
-            ? `${envParts.join(' ')} ${startInfo.fullCommand}`
-            : startInfo.fullCommand;
-
-          const tmuxCommand = `tmux new-session -d -s ${tmuxSessionName} "${fullCommand}"`;
-          execSync(tmuxCommand, { timeout: 5000 });
-          startSuccess = true;
-          startMethod = 'tmux';
-          console.log(`[Agent] ${agentId} 已在 tmux session "${tmuxSessionName}" 中启动`);
-        }
-
-        // 等待一下让 Agent 初始化
-        execSync(isWindows ? 'timeout /t 2 /nobreak >nul' : 'sleep 2');
-
-        // 更新配置文件
-        if (!agent.tmux && !isWindows) {
-          const configPath = path.join(os.homedir(), '.hermes/agent-orchestrator/config.yaml');
-          try {
-            const config = yaml.parse(fs.readFileSync(configPath, 'utf8')) || {};
-            if (config.agents && config.agents[agentId]) {
-              config.agents[agentId].tmux = tmuxSessionName;
-              fs.writeFileSync(configPath, yaml.stringify(config, { lineWidth: -1 }), 'utf8');
-              Object.assign(appConfig, loadConfig());
-            }
-          } catch (e) {
-            console.error('[Agent] 更新配置文件失败:', e.message);
-          }
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
+      // 检查 CLI 是否可用
+      const cliType = agent.cli_type || 'hermes';
+      if (!isCliAvailable(cliType)) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
-          session_id: sessionId,
-          tmux: isWindows ? null : tmuxSessionName,
-          cli_type: startInfo.cliType,
-          cli_name: startInfo.cliName,
-          cli_icon: startInfo.cliIcon,
-          start_method: startMethod,
-          status: startSuccess ? 'started' : 'failed',
-          message: startSuccess
-            ? `${startInfo.cliIcon} ${startInfo.cliName} 已通过 ${startMethod} 启动`
-            : `${startInfo.cliName} 启动失败`,
+          error: `${cliType} CLI 未安装`,
+          cliType,
         }));
-      } catch (startErr) {
-        console.error(`[Agent] 启动失败:`, startErr.message);
+        return;
+      }
 
-        // 检查是否已经发送了响应
-        if (!res.headersSent) {
-          // 回退：只创建会话文件
-          const sessionsDir = path.join(os.homedir(), '.hermes/sessions');
-          if (!fs.existsSync(sessionsDir)) {
-            fs.mkdirSync(sessionsDir, { recursive: true });
-          }
+      // 使用进程管理器启动 Agent
+      const agentInfo = startAgentProcess(agentId, agent);
 
-          const sessionFile = path.join(sessionsDir, `session_${sessionId}.json`);
-          const sessionData = {
-            session_id: sessionId,
-            platform: 'agentdesk',
-            agent_id: agentId,
-            agent_config: {
-              name: agent.name,
-              base_url: agent.base_url,
-              model: agent.model,
-            },
-            messages: [],
-            created_at: Date.now(),
-            updated_at: Date.now(),
-          };
-          fs.writeFileSync(sessionFile, JSON.stringify(sessionData, null, 2));
+      // 等待 Agent 就绪（最多 10 秒）
+      const waitStart = Date.now();
+      const checkReady = setInterval(() => {
+        const elapsed = Date.now() - waitStart;
+
+        if (agentInfo.status === 'running' || elapsed > 10000) {
+          clearInterval(checkReady);
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
-            session_id: sessionId,
-            status: 'session_only',
-            message: `启动失败，已创建会话文件`,
-            error: startErr.message,
+            status: agentInfo.status === 'running' ? 'started' : 'starting',
+            sessionId: agentInfo.sessionId,
+            cliType: agentInfo.cliType,
+            cliName: agentInfo.cliName,
+            message: agentInfo.status === 'running'
+              ? `✅ ${agentInfo.cliName} 已启动并就绪`
+              : `⏳ ${agentInfo.cliName} 正在启动中...`,
           }));
         }
-      }
+      }, 500);
+
     } catch (err) {
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -1516,29 +1641,11 @@ ${startInfo.command} ${startInfo.args.join(' ')}
   if (req.url.match(/^\/api\/agents\/[^/]+\/stop$/) && req.method === 'POST') {
     const agentId = req.url.split('/')[3];
     try {
-      const agents = appConfig.agents || {};
-      const agent = agents[agentId];
-      if (!agent) {
-        res.writeHead(404, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Agent not found' }));
-        return;
-      }
-
-      let stopped = false;
-
-      // Kill tmux session if exists
-      if (agent.tmux) {
-        try {
-          execSync(`tmux kill-session -t ${agent.tmux}`, { timeout: 3000 });
-          stopped = true;
-        } catch (e) {
-          // Session might not exist
-        }
-      }
+      const result = stopAgentProcess(agentId);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        status: stopped ? 'stopped' : 'not_running',
+        ...result,
         agent: agentId,
       }));
     } catch (err) {
