@@ -1581,18 +1581,21 @@ const server = http.createServer((req, res) => {
 
         // 用 exec + echo pipe 方式调用（已验证可行）
         const { exec } = require('child_process');
-        const escapedMessage = message.replace(/"/g, '\\"');
+
+        // 将消息写入临时文件，避免编码问题
+        const tempFile = path.join(os.tmpdir(), `agent_task_${sessionId}.txt`);
+        fs.writeFileSync(tempFile, message, 'utf-8');
 
         // 根据平台构建命令
         const isWindows = process.platform === 'win32';
         let fullCommand;
 
         if (startInfo.cliType === 'claude') {
-          // Claude CLI: 使用 echo pipe
+          // Claude CLI: 使用文件重定向
           if (isWindows) {
-            fullCommand = `echo ${escapedMessage} | ${startInfo.command} --session-id ${sessionId}`;
+            fullCommand = `type "${tempFile}" | ${startInfo.command} --session-id ${sessionId}`;
           } else {
-            fullCommand = `echo "${escapedMessage}" | ${startInfo.command} --session-id ${sessionId}`;
+            fullCommand = `cat "${tempFile}" | ${startInfo.command} --session-id ${sessionId}`;
           }
         } else {
           // 其他 CLI: 直接执行命令
@@ -1608,6 +1611,13 @@ const server = http.createServer((req, res) => {
           env: { ...process.env, ...startInfo.env },
           encoding: 'utf-8',
         }, (error, stdout, stderr) => {
+          // 清理临时文件
+          try {
+            fs.unlinkSync(tempFile);
+          } catch (e) {
+            // 忽略清理错误
+          }
+
           if (error) {
             if (error.killed) {
               sendEvent({ type: 'status', message: '执行超时' });
