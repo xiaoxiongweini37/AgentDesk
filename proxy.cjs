@@ -812,6 +812,9 @@ function getAllAgentStatus() {
   return statuses;
 }
 
+// 任务存储（内存中，全局共享）
+const tasks = new Map()
+
 const server = http.createServer((req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -879,9 +882,6 @@ const server = http.createServer((req, res) => {
   }
 
   // ===== 任务管理 API =====
-
-  // 任务存储（内存中）
-  const tasks = new Map()
 
   // 获取所有任务
   if (req.url === '/api/tasks' && req.method === 'GET') {
