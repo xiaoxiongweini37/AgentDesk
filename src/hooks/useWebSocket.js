@@ -17,24 +17,37 @@ export function useWebSocket(agentId = null) {
   const [notifications, setNotifications] = useState([])
   const wsRef = useRef(null)
   const reconnectTimerRef = useRef(null)
+  const agentIdRef = useRef(agentId)
+
+  // 更新 agentId ref
+  useEffect(() => {
+    agentIdRef.current = agentId
+  }, [agentId])
 
   // 连接 WebSocket
   const connect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      return
+    // 清除之前的重连定时器
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
     }
 
-    const url = agentId ? `${WS_BASE}?agentId=${agentId}` : WS_BASE
+    // 如果已经有连接，先关闭
+    if (wsRef.current) {
+      wsRef.current.close()
+      wsRef.current = null
+    }
+
+    const currentAgentId = agentIdRef.current
+    const url = currentAgentId ? `${WS_BASE}?agentId=${currentAgentId}` : WS_BASE
+
+    console.log('[WebSocket] 连接到:', url)
+
     const ws = new WebSocket(url)
 
     ws.onopen = () => {
       console.log('[WebSocket] 已连接')
       setConnected(true)
-      // 清除重连定时器
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current)
-        reconnectTimerRef.current = null
-      }
     }
 
     ws.onmessage = (event) => {
@@ -58,11 +71,11 @@ export function useWebSocket(agentId = null) {
       setConnected(false)
       wsRef.current = null
 
-      // 自动重连（每 5 秒）
+      // 自动重连（每 3 秒）
       reconnectTimerRef.current = setTimeout(() => {
         console.log('[WebSocket] 尝试重连...')
         connect()
-      }, 5000)
+      }, 3000)
     }
 
     ws.onerror = (error) => {
@@ -70,7 +83,7 @@ export function useWebSocket(agentId = null) {
     }
 
     wsRef.current = ws
-  }, [agentId])
+  }, [])
 
   // 断开连接
   const disconnect = useCallback(() => {
@@ -107,6 +120,14 @@ export function useWebSocket(agentId = null) {
       disconnect()
     }
   }, [connect, disconnect])
+
+  // agentId 变化时重新连接
+  useEffect(() => {
+    if (agentId) {
+      console.log('[WebSocket] Agent ID 变化，重新连接:', agentId)
+      connect()
+    }
+  }, [agentId, connect])
 
   return {
     connected,
