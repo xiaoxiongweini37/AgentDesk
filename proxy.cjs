@@ -878,6 +878,124 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // ===== 任务管理 API =====
+
+  // 任务存储（内存中）
+  const tasks = new Map()
+
+  // 获取所有任务
+  if (req.url === '/api/tasks' && req.method === 'GET') {
+    const url = new URL(req.url, `http://${req.headers.host}`)
+    const status = url.searchParams.get('status')
+
+    let taskList = Array.from(tasks.values())
+
+    if (status) {
+      taskList = taskList.filter(t => t.status === status)
+    }
+
+    // 按创建时间排序
+    taskList.sort((a, b) => b.createdAt - a.createdAt)
+
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(taskList))
+    return
+  }
+
+  // 创建任务
+  if (req.url === '/api/tasks' && req.method === 'POST') {
+    let body = ''
+    req.on('data', chunk => body += chunk)
+    req.on('end', () => {
+      try {
+        const { title, description, priority, assignedTo } = JSON.parse(body)
+
+        const task = {
+          id: generateUUID(),
+          title: title || '未命名任务',
+          description: description || '',
+          status: 'pending',
+          priority: priority || 'normal',
+          assignedTo: assignedTo || null,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          completedAt: null,
+        }
+
+        tasks.set(task.id, task)
+
+        console.log(`[Task] 任务已创建: ${task.id} - ${task.title}`)
+
+        res.writeHead(201, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(task))
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+    return
+  }
+
+  // 更新任务
+  if (req.url.match(/^\/api\/tasks\/[^/]+$/) && req.method === 'PUT') {
+    const taskId = req.url.split('/')[3]
+    let body = ''
+    req.on('data', chunk => body += chunk)
+    req.on('end', () => {
+      try {
+        const task = tasks.get(taskId)
+        if (!task) {
+          res.writeHead(404, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ error: '任务不存在' }))
+          return
+        }
+
+        const updates = JSON.parse(body)
+
+        if (updates.title !== undefined) task.title = updates.title
+        if (updates.description !== undefined) task.description = updates.description
+        if (updates.status !== undefined) {
+          task.status = updates.status
+          if (updates.status === 'completed') {
+            task.completedAt = Date.now()
+          }
+        }
+        if (updates.priority !== undefined) task.priority = updates.priority
+        if (updates.assignedTo !== undefined) task.assignedTo = updates.assignedTo
+
+        task.updatedAt = Date.now()
+
+        console.log(`[Task] 任务已更新: ${taskId} - ${task.status}`)
+
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(task))
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: err.message }))
+      }
+    })
+    return
+  }
+
+  // 删除任务
+  if (req.url.match(/^\/api\/tasks\/[^/]+$/) && req.method === 'DELETE') {
+    const taskId = req.url.split('/')[3]
+
+    if (!tasks.has(taskId)) {
+      res.writeHead(404, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: '任务不存在' }))
+      return
+    }
+
+    tasks.delete(taskId)
+
+    console.log(`[Task] 任务已删除: ${taskId}`)
+
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ success: true }))
+    return
+  }
+
   // 发送消息给运行中的 Agent
   if (req.url.match(/^\/api\/agents\/[^/]+\/send$/) && req.method === 'POST') {
     const agentId = req.url.split('/')[3];
