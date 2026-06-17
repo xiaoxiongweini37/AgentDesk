@@ -669,101 +669,93 @@ function getAgentList() {
 
 const agentProcesses = new Map(); // agentId -> { process, sessionId, status, output }
 
-// 启动持久化 Agent 进程
+// Agent 配置存储（持久化会话 ID）
+const agentSessions = new Map(); // agentId -> sessionId
+
+// 启动 Agent（记录会话 ID，不真正启动进程）
 function startAgentProcess(agentId, agent) {
-  const sessionId = generateUUID();
+  // 生成或复用 session ID
+  let sessionId = agentSessions.get(agentId);
+  if (!sessionId) {
+    sessionId = generateUUID();
+    agentSessions.set(agentId, sessionId);
+  }
+
   const startInfo = buildStartCommand(agent, sessionId);
-
-  console.log(`[AgentManager] 启动 ${agentId}，CLI: ${startInfo.cliType}，Session: ${sessionId}`);
-
-  const { spawn } = require('child_process');
-  const env = { ...process.env, ...startInfo.env };
-
-  // 使用 spawn 启动进程，保持 stdin/stdout 管道
-  const childProcess = spawn(startInfo.command, startInfo.args, {
-    env,
-    shell: true,
-    stdio: ['pipe', 'pipe', 'pipe'],
-  });
+  console.log(`[AgentManager] 注册 ${agentId}，CLI: ${startInfo.cliType}，Session: ${sessionId}`);
 
   const agentInfo = {
-    process: childProcess,
     sessionId,
     cliType: startInfo.cliType,
     cliName: startInfo.cliName,
-    status: 'starting',
+    status: 'running',  // 直接标记为运行中
     output: [],
     lastActivity: Date.now(),
     startTime: Date.now(),
+    command: startInfo.command,
+    args: startInfo.args,
+    env: startInfo.env,
   };
-
-  // 监听 stdout
-  childProcess.stdout.on('data', (data) => {
-    const text = data.toString();
-    agentInfo.output.push({ type: 'stdout', content: text, timestamp: Date.now() });
-    agentInfo.lastActivity = Date.now();
-
-    // 限制输出历史长度
-    if (agentInfo.output.length > 1000) {
-      agentInfo.output = agentInfo.output.slice(-500);
-    }
-
-    // 如果还在 starting 状态，检测就绪信号
-    if (agentInfo.status === 'starting') {
-      if (text.includes('>') || text.includes('$') || text.includes('Ready') || text.length > 0) {
-        agentInfo.status = 'running';
-        console.log(`[AgentManager] ${agentId} 已就绪`);
-      }
-    }
-
-    console.log(`[AgentManager] ${agentId} stdout:`, text.substring(0, 100));
-  });
-
-  // 监听 stderr
-  childProcess.stderr.on('data', (data) => {
-    const text = data.toString();
-    agentInfo.output.push({ type: 'stderr', content: text, timestamp: Date.now() });
-    console.log(`[AgentManager] ${agentId} stderr:`, text.substring(0, 100));
-  });
-
-  // 进程退出
-  childProcess.on('exit', (code) => {
-    console.log(`[AgentManager] ${agentId} 退出，代码: ${code}`);
-    agentInfo.status = 'stopped';
-    agentInfo.exitCode = code;
-  });
-
-  // 进程错误
-  childProcess.on('error', (error) => {
-    console.error(`[AgentManager] ${agentId} 错误:`, error.message);
-    agentInfo.status = 'error';
-    agentInfo.error = error.message;
-  });
 
   agentProcesses.set(agentId, agentInfo);
 
   return agentInfo;
 }
 
-// 发送消息给运行中的 Agent
+// 发送消息给运行中的 Agent（使用 exec）
 function sendMessageToAgent(agentId, message) {
-  const agentInfo = agentProcesses.get(agentId);
+  return new Promise((resolve) => {
+    const agentInfo = agentProcesses.get(agentId);
 
-  if (!agentInfo) {
-    return { error: 'Agent 未启动' };
-  }
+    if (!agentInfo) {
+      resolve({ error: 'Agent 未启动' });
+      return;
+    }
 
-  if (agentInfo.status !== 'running' && agentInfo.status !== 'starting') {
-    return { error: `Agent 状态异常: ${agentInfo.status}` };
-  }
+    if (agentInfo.status !== 'running') {
+      resolve({ error: `Agent 状态异常: ${agentInfo.status}` });
+      return;
+    }
 
-  try {
-    agentInfo.process.stdin.write(message + '\n');
-    agentInfo.lastActivity = Date.now();
-    return { success: true, message: '消息已发送' };
-  } catch (error) {
-    return { error: error.message };
-  }
+    const { exec } = require('child_process');
+    const escapedMessage = message.replace(/"/g, '\\"');
+
+    // 使用 echo pipe 方式调用 CLI
+    const fullCommand = `echo "${escapedMessage}" | ${agentInfo.command} --session-id ${agentInfo.sessionId}`;
+
+    console.log(`[AgentManager] ${agentId} 执行: ${fullCommand.substring(0, 100)}...`);
+
+    const childProcess = exec(fullCommand, {
+      timeout: 60000,
+      env: { ...process.env, ...agentInfo.env },
+      encoding: 'utf-8',
+    }, (error, stdout, stderr) => {
+      if (error) {
+        console.log(`[AgentManager] ${agentId} 错误:`, error.message);
+        resolve({ error: error.message });
+        return;
+      }
+
+      const output = stdout || stderr || '';
+      console.log(`[AgentManager] ${agentId} 输出 (${output.length} bytes)`);
+
+      // 记录输出
+      agentInfo.output.push({
+        type: 'response',
+        content: output,
+        timestamp: Date.now(),
+        message: message,
+      });
+
+      agentInfo.lastActivity = Date.now();
+
+      resolve({
+        success: true,
+        output: output,
+        message: '消息已发送并收到响应',
+      });
+    });
+  });
 }
 
 // 获取 Agent 输出
@@ -794,22 +786,11 @@ function stopAgentProcess(agentId) {
     return { error: 'Agent 未启动' };
   }
 
-  try {
-    agentInfo.process.stdin.write('/exit\n');
+  // 清除会话 ID
+  agentSessions.delete(agentId);
+  agentProcesses.delete(agentId);
 
-    setTimeout(() => {
-      if (agentInfo.process && !agentInfo.process.killed) {
-        agentInfo.process.kill();
-      }
-    }, 3000);
-
-    agentInfo.status = 'stopping';
-    return { success: true, message: '正在停止...' };
-  } catch (error) {
-    agentInfo.process.kill();
-    agentInfo.status = 'stopped';
-    return { success: true, message: '已强制停止' };
-  }
+  return { success: true, message: 'Agent 已停止' };
 }
 
 // 获取所有 Agent 状态
@@ -834,6 +815,43 @@ function getAllAgentStatus() {
 const server = http.createServer((req, res) => {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // Debug: 测试 spawn
+  if (req.url === '/api/debug/spawn-test' && req.method === 'POST') {
+    const { spawn } = require('child_process');
+    const sessionId = generateUUID();
+
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+    const send = (d) => res.write(`data: ${JSON.stringify(d)}\n\n`);
+
+    send({ msg: `Spawning claude with session ${sessionId}` });
+
+    const proc = spawn('claude', ['--session-id', sessionId], { shell: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    send({ msg: `PID: ${proc.pid}` });
+
+    proc.stdout.on('data', (data) => {
+      send({ type: 'stdout', content: data.toString() });
+    });
+    proc.stderr.on('data', (data) => {
+      send({ type: 'stderr', content: data.toString() });
+    });
+    proc.on('exit', (code) => {
+      send({ type: 'exit', code });
+      res.end();
+    });
+
+    setTimeout(() => {
+      send({ msg: 'Writing hello...' });
+      proc.stdin.write('hello\n');
+    }, 500);
+
+    setTimeout(() => {
+      send({ msg: 'Killing...' });
+      proc.kill();
+    }, 15000);
+
+    return;
+  }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Hermes-Session-Id');
   
@@ -860,12 +878,12 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  // 发送消息给运行中的 Agent（SSE 流式响应）
+  // 发送消息给运行中的 Agent
   if (req.url.match(/^\/api\/agents\/[^/]+\/send$/) && req.method === 'POST') {
     const agentId = req.url.split('/')[3];
     let body = '';
     req.on('data', chunk => body += chunk);
-    req.on('end', () => {
+    req.on('end', async () => {
       try {
         const { message } = JSON.parse(body);
 
@@ -894,54 +912,19 @@ const server = http.createServer((req, res) => {
           res.write(`data: ${JSON.stringify(data)}\n\n`);
         };
 
-        // 记录发送前的输出数量
-        const outputBefore = agentInfo.output.length;
-        let lastOutputTime = Date.now();
+        sendEvent({ type: 'status', message: '正在发送消息并等待响应...' });
 
-        // 发送消息
-        const result = sendMessageToAgent(agentId, message);
+        // 发送消息并等待响应
+        const result = await sendMessageToAgent(agentId, message);
+
         if (result.error) {
           sendEvent({ type: 'error', message: result.error });
-          res.end();
-          return;
+        } else {
+          sendEvent({ type: 'output', content: result.output });
+          sendEvent({ type: 'complete', output: result.output });
         }
 
-        sendEvent({ type: 'status', message: '消息已发送，等待响应...' });
-
-        // 轮询新输出
-        const pollInterval = setInterval(() => {
-          const newOutput = agentInfo.output.slice(outputBefore);
-
-          if (newOutput.length > 0) {
-            const latestOutput = newOutput[newOutput.length - 1];
-            sendEvent({ type: 'output', content: latestOutput.content });
-            lastOutputTime = Date.now();
-          }
-
-          // 检查是否完成（3秒无新输出）
-          const timeSinceLastOutput = Date.now() - lastOutputTime;
-          if (timeSinceLastOutput > 3000 && agentInfo.output.length > outputBefore) {
-            clearInterval(pollInterval);
-
-            // 收集所有新输出
-            const allNewOutput = agentInfo.output.slice(outputBefore)
-              .map(o => o.content)
-              .join('');
-
-            sendEvent({
-              type: 'complete',
-              output: allNewOutput,
-            });
-            res.end();
-          }
-        }, 200);
-
-        // 超时处理
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          sendEvent({ type: 'timeout', message: '等待响应超时' });
-          res.end();
-        }, 60000);
+        res.end();
 
       } catch (error) {
         if (!res.headersSent) {
