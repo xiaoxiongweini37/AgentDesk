@@ -968,7 +968,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/test/agent' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => body += chunk);
-    req.on('end', async () => {
+    req.on('end', () => {
       try {
         const { agentId, message, cliType } = JSON.parse(body);
 
@@ -983,6 +983,9 @@ const server = http.createServer((req, res) => {
 
         // 构建启动命令
         const startInfo = buildStartCommand(agent, generateUUID());
+        const sessionId = startInfo.args[1];
+
+        console.log(`[Test Agent] Agent: ${agentId}, CLI: ${startInfo.cliType}, Session: ${sessionId}`);
 
         // 设置 SSE 响应头
         res.writeHead(200, {
@@ -991,118 +994,66 @@ const server = http.createServer((req, res) => {
           'Connection': 'keep-alive',
         });
 
-        // 发送状态更新
         const sendEvent = (data) => {
           res.write(`data: ${JSON.stringify(data)}\n\n`);
         };
 
-        sendEvent({ type: 'status', message: `启动 ${startInfo.cliName}...` });
+        sendEvent({ type: 'status', message: `启动 ${startInfo.cliName} (${startInfo.cliType})...` });
 
-        // 启动 CLI 进程
-        const { spawn } = require('child_process');
+        // 用 exec + echo pipe 方式调用（已验证可行）
+        const { exec } = require('child_process');
+        const escapedMessage = message.replace(/"/g, '\\"');
+
+        // 根据平台构建命令
         const isWindows = process.platform === 'win32';
+        let fullCommand;
 
-        let process;
-        try {
-          // 构建环境变量
-          const env = { ...process.env, ...startInfo.env };
-
-          // 启动进程
-          process = spawn(startInfo.command, startInfo.args, {
-            env,
-            shell: true,
-            stdio: ['pipe', 'pipe', 'pipe'],
-          });
-
-          sendEvent({ type: 'status', message: `${startInfo.cliName} 进程已启动 (PID: ${process.pid})` });
-
-          // 收集输出
-          let outputBuffer = '';
-          let responseReceived = false;
-          let lastOutputTime = Date.now();
-          let responseComplete = false;
-
-          process.stdout.on('data', (data) => {
-            const output = data.toString();
-            outputBuffer += output;
-            lastOutputTime = Date.now();
-
-            // 发送输出到客户端
-            sendEvent({ type: 'output', content: output });
-
-            // 检查是否收到完整响应（简单判断：包含换行且不是空行）
-            if (output.includes('\n') && output.trim().length > 0) {
-              responseReceived = true;
-            }
-          });
-
-          process.stderr.on('data', (data) => {
-            sendEvent({ type: 'error', content: data.toString() });
-          });
-
-          // 发送消息到 CLI
-          sendEvent({ type: 'status', message: '发送消息...' });
-          process.stdin.write(message + '\n');
-
-          // 等待响应（最多 30 秒）
-          const timeout = setTimeout(() => {
-            if (!responseReceived) {
-              sendEvent({ type: 'status', message: '等待响应超时' });
-              process.kill();
-              res.end();
-            }
-          }, 30000);
-
-          // 检测响应完成（2 秒无新输出）
-          const checkComplete = setInterval(() => {
-            if (responseReceived && !responseComplete) {
-              const timeSinceLastOutput = Date.now() - lastOutputTime;
-              if (timeSinceLastOutput > 2000) {
-                // 2 秒无新输出，认为响应完成
-                responseComplete = true;
-                clearInterval(checkComplete);
-                clearTimeout(timeout);
-
-                sendEvent({
-                  type: 'complete',
-                  exitCode: 0,
-                  output: outputBuffer,
-                });
-
-                // 关闭进程
-                process.kill();
-                res.end();
-              }
-            }
-          }, 500);
-
-          // 等待进程退出
-          process.on('exit', (code) => {
-            clearInterval(checkComplete);
-            clearTimeout(timeout);
-            if (!responseComplete) {
-              sendEvent({
-                type: 'complete',
-                exitCode: code,
-                output: outputBuffer,
-              });
-              res.end();
-            }
-          });
-
-          process.on('error', (error) => {
-            clearInterval(checkComplete);
-            clearTimeout(timeout);
-            sendEvent({ type: 'error', message: error.message });
-            res.end();
-          });
-
-        } catch (error) {
-          if (!res.headersSent) {
-            sendEvent({ type: 'error', message: error.message });
+        if (startInfo.cliType === 'claude') {
+          // Claude CLI: 使用 echo pipe
+          if (isWindows) {
+            fullCommand = `echo ${escapedMessage} | ${startInfo.command} --session-id ${sessionId}`;
+          } else {
+            fullCommand = `echo "${escapedMessage}" | ${startInfo.command} --session-id ${sessionId}`;
           }
-          res.end();
+        } else {
+          // 其他 CLI: 直接执行命令
+          fullCommand = `${startInfo.fullCommand}`;
         }
+
+        console.log(`[Test Agent] 执行命令: ${fullCommand}`);
+
+        sendEvent({ type: 'status', message: '执行中...' });
+
+        const childProcess = exec(fullCommand, {
+          timeout: 60000,
+          env: { ...process.env, ...startInfo.env },
+          encoding: 'utf-8',
+        }, (error, stdout, stderr) => {
+          if (error) {
+            if (error.killed) {
+              sendEvent({ type: 'status', message: '执行超时' });
+            } else {
+              sendEvent({ type: 'error', message: error.message });
+            }
+          }
+
+          if (stderr) {
+            sendEvent({ type: 'output', content: stderr });
+          }
+
+          if (stdout) {
+            sendEvent({ type: 'output', content: stdout });
+          }
+
+          sendEvent({
+            type: 'complete',
+            exitCode: error ? error.code : 0,
+            output: stdout || '',
+          });
+
+          res.end();
+        });
+
       } catch (error) {
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
